@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QQ农场挂机 - 控制面板</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="login-overlay" id="loginOverlay">
+        <div class="login-box">
+            <h1>🌾 QQ农场挂机</h1>
+            <form id="loginForm">
+                <div class="form-group">
+                    <input type="text" id="username" placeholder="用户名" required>
+                </div>
+                <div class="form-group">
+                    <input type="password" id="password" placeholder="密码" required>
+                </div>
+                <button type="submit" class="btn-login">登录</button>
+                <div class="login-tip" id="loginTip"></div>
+            </form>
+            <div class="login-demo">
+                <p>没有账号？<a href="#" id="showRegister">注册新账号</a></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="login-overlay" id="registerOverlay" style="display:none;">
+        <div class="login-box">
+            <h1>🌾 注册账号</h1>
+            <form id="registerForm">
+                <div class="form-group">
+                    <input type="text" id="regUsername" placeholder="用户名 (2-20字符)" required>
+                </div>
+                <div class="form-group">
+                    <input type="password" id="regPassword" placeholder="密码 (4-20字符)" required>
+                </div>
+                <button type="submit" class="btn-login">注册</button>
+                <div class="login-tip" id="registerTip"></div>
+            </form>
+            <div class="login-demo">
+                <p><a href="#" id="showLogin">返回登录</a></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="add-account-modal" id="addAccountModal" style="display:none;">
+        <div class="modal-content">
+            <h2>添加账号</h2>
+            <div class="form-group">
+                <label>账号名称</label>
+                <input type="text" id="newAccountName" placeholder="如: 小号1">
+            </div>
+            <div class="form-group">
+                <label>平台</label>
+                <select id="newAccountPlatform">
+                    <option value="qq">QQ</option>
+                    <option value="wx">微信</option>
+                </select>
+            </div>
+            <div class="modal-tip" id="modalTip"></div>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="cancelAddAccount">取消</button>
+                <button class="btn-confirm" id="confirmAddAccount">扫码添加</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="add-account-modal" id="qrModal" style="display:none;">
+        <div class="modal-content qr-modal">
+            <h2>📱 扫码登录</h2>
+            <p class="qr-tip">请用 QQ 扫描二维码登录</p>
+            <div class="qr-image-container">
+                <img id="qrImage" src="" alt="二维码">
+            </div>
+            <div class="qr-status" id="qrStatus">等待扫码...</div>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="cancelQr">取消</button>
+                <button class="btn-confirm" id="refreshQr">刷新二维码</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-layout" id="mainContainer" style="display:none;">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>📋 账号列表</h2>
+            </div>
+            <div class="account-list" id="accountList">
+                <div class="empty">暂无账号</div>
+            </div>
+            <div class="sidebar-footer">
+                <button class="btn-add-account" id="addAccountBtn">+ 添加账号</button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header>
+                <h1>🌾 QQ农场挂机</h1>
+                <div class="header-right">
+                    <span class="user-info" id="userInfo"></span>
+                    <button class="btn-logout" id="logoutBtn">退出</button>
+                </div>
+            </header>
+
+            <div class="content-wrapper">
+                <section class="status-panel">
+                    <h2>📊 <span id="currentAccountName">账号状态</span></h2>
+                    <div class="status-grid">
+                        <div class="status-item">
+                            <span class="label">平台</span>
+                            <span class="value" id="platform">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">在线</span>
+                            <span class="value" id="online">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">等级</span>
+                            <span class="value" id="level">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">经验(当前/升级)</span>
+                            <span class="value" id="exp">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">金币</span>
+                            <span class="value gold" id="gold">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">运行时间</span>
+                            <span class="value" id="runTime">-</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="farm-panel">
+                    <h2>🌱 我的农场</h2>
+                    <div class="farm-grid" id="farmGrid">
+                        <div class="empty">暂无数据</div>
+                    </div>
+                </section>
+
+                <section class="log-panel">
+                    <h2>📝 游戏日志</h2>
+                    <div class="log-container" id="logContainer">
+                        <div class="log-empty">暂无日志</div>
+                    </div>
+                </section>
+
+                <section class="config-panel" id="configPanel">
+                    <h2>⚙️ 参数配置</h2>
+                    <div class="config-form">
+                        <div class="config-item">
+                            <label for="farmInterval">自己农场巡查间隔(秒)</label>
+                            <input type="number" id="farmInterval" min="1" value="1">
+                        </div>
+                        <div class="config-item">
+                            <label for="friendInterval">好友巡查间隔(秒)</label>
+                            <input type="number" id="friendInterval" min="1" value="2">
+                        </div>
+                        <div class="config-item">
+                            <label for="seedSelect">种子选择</label>
+                            <select id="seedSelect">
+                                <option value="">-- 自动推荐 --</option>
+                            </select>
+                            <span class="recommend-tag" id="recommendTag"></span>
+                        </div>
+                        <div class="config-item">
+                            <label>
+                                <input type="checkbox" id="autoFarm"> 自动种植/收获
+                            </label>
+                        </div>
+                        <div class="config-item">
+                            <label>
+                                <input type="checkbox" id="autoFertilize"> 自动施肥
+                            </label>
+                        </div>
+                        <div class="config-item">
+                            <label>
+                                <input type="checkbox" id="autoSteal"> 自动偷菜
+                            </label>
+                        </div>
+                        <div class="config-item">
+                            <label for="stealMinLevel">低于此等级不偷</label>
+                            <input type="number" id="stealMinLevel" min="0" value="0" style="width:60px;">
+                        </div>
+                        <div class="config-item">
+                            <label>
+                                <input type="checkbox" id="autoHelp"> 帮助好友(除草/除虫/浇水)
+                            </label>
+                        </div>
+                        <div class="config-item">
+                            <label>
+                                <input type="checkbox" id="autoPutBug"> 自动放虫
+                            </label>
+                        </div>
+                        <div class="config-item">
+                            <label>
+                                <input type="checkbox" id="autoPutWeed"> 自动放草
+                            </label>
+                        </div>
+                        <div class="config-item">
+                            <label>
+                                <input type="checkbox" id="autoSell"> 自动卖果实
+                            </label>
+                        </div>
+                        <div class="config-item">
+                            <label>
+                                <input type="checkbox" id="autoTask"> 自动任务
+                            </label>
+                        </div>
+                        <div class="config-actions">
+                            <button id="saveConfig" class="btn-save">保存配置</button>
+                            <button id="deleteAccount" class="btn-delete">删除账号</button>
+                        </div>
+                    </div>
+                    <div class="config-tip" id="configTip"></div>
+                    
+                    <div class="exp-rank-section" id="expRankSection">
+                        <h3>📊 经验排行榜 <span id="rankInfo"></span></h3>
+                        <div class="rank-container">
+                            <div class="rank-column">
+                                <h4>不施肥 Top 5</h4>
+                                <ul class="rank-list" id="rankNoFert"></ul>
+                            </div>
+                            <div class="rank-column">
+                                <h4>施肥 Top 5 <span class="recommend-badge">推荐</span></h4>
+                                <ul class="rank-list" id="rankNormalFert"></ul>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <footer>
+                <p>最后更新: <span id="lastUpdate">-</span></p>
+            </footer>
+        </main>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>
