@@ -1,0 +1,392 @@
+{
+  "accountId": "acc_760c481d",
+  "lastUpdate": "2026-02-23T17:22:08.776Z",
+  "totalLands": 24,
+  "unlockedLands": 18,
+  "lands": [
+    {
+      "id": 1,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 1,
+        "phaseName": "种子",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "growing"
+    },
+    {
+      "id": 2,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 1,
+        "phaseName": "种子",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "growing"
+    },
+    {
+      "id": 3,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 1,
+        "phaseName": "种子",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "growing"
+    },
+    {
+      "id": 4,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 1,
+        "phaseName": "种子",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "growing"
+    },
+    {
+      "id": 5,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 1,
+        "phaseName": "种子",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "growing"
+    },
+    {
+      "id": 6,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 1,
+        "phaseName": "种子",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "growing"
+    },
+    {
+      "id": 7,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 1,
+        "phaseName": "种子",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "growing"
+    },
+    {
+      "id": 8,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 1,
+        "phaseName": "种子",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "growing"
+    },
+    {
+      "id": 9,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 1,
+        "phaseName": "种子",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "growing"
+    },
+    {
+      "id": 10,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 1,
+        "phaseName": "种子",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "growing"
+    },
+    {
+      "id": 11,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 1,
+        "phaseName": "种子",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "growing"
+    },
+    {
+      "id": 12,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 6,
+        "phaseName": "成熟",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "ready"
+    },
+    {
+      "id": 13,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 6,
+        "phaseName": "成熟",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "ready"
+    },
+    {
+      "id": 14,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 6,
+        "phaseName": "成熟",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "ready"
+    },
+    {
+      "id": 15,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 6,
+        "phaseName": "成熟",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "ready"
+    },
+    {
+      "id": 16,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 6,
+        "phaseName": "成熟",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "ready"
+    },
+    {
+      "id": 17,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 6,
+        "phaseName": "成熟",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "ready"
+    },
+    {
+      "id": 18,
+      "unlocked": true,
+      "level": 1,
+      "plant": {
+        "id": 1020002,
+        "name": "白萝卜",
+        "phase": 6,
+        "phaseName": "成熟",
+        "growSec": 60,
+        "dryNum": 0,
+        "hasWeed": false,
+        "hasInsect": false,
+        "fruitNum": 5,
+        "stealable": true,
+        "stolenNum": 0
+      },
+      "status": "ready"
+    },
+    {
+      "id": 19,
+      "unlocked": false,
+      "level": 0,
+      "plant": null,
+      "status": "locked"
+    },
+    {
+      "id": 20,
+      "unlocked": false,
+      "level": 0,
+      "plant": null,
+      "status": "locked"
+    },
+    {
+      "id": 21,
+      "unlocked": false,
+      "level": 0,
+      "plant": null,
+      "status": "locked"
+    },
+    {
+      "id": 22,
+      "unlocked": false,
+      "level": 0,
+      "plant": null,
+      "status": "locked"
+    },
+    {
+      "id": 23,
+      "unlocked": false,
+      "level": 0,
+      "plant": null,
+      "status": "locked"
+    },
+    {
+      "id": 24,
+      "unlocked": false,
+      "level": 0,
+      "plant": null,
+      "status": "locked"
+    }
+  ]
+}

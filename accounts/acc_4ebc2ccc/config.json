@@ -1,0 +1,17 @@
+{
+  "id": "acc_4ebc2ccc",
+  "name": "炸房专用号",
+  "code": "3a076d1b8b4eb7c023ec0e9707d5ccf8",
+  "platform": "qq",
+  "farmInterval": 1,
+  "friendInterval": 2,
+  "autoSell": true,
+  "autoFarm": true,
+  "autoFertilize": true,
+  "autoTask": true,
+  "autoSteal": true,
+  "autoHelp": true,
+  "enabled": true,
+  "createdAt": "2026-02-23T17:21:27.674Z",
+  "selectedSeed": null
+}
