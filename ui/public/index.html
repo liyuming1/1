@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>农场管理系统</title>
+    <link rel="stylesheet" href="/css/main.css?v=2">
+</head>
+<body>
+    <header>
+        <h1>🌾 农场管理系统</h1>
+        <div class="header-actions">
+            <button id="btn-refresh" class="btn btn-primary">刷新</button>
+            <button id="btn-add-account" class="btn btn-success">添加账号</button>
+            <span id="connection-status" class="status-disconnected">未连接</span>
+        </div>
+    </header>
+    
+    <main>
+        <div id="accounts-grid" class="accounts-grid"></div>
+        
+        <div id="detail-panel" class="detail-panel hidden">
+            <div class="detail-header">
+                <h2 id="detail-title">账号详情</h2>
+                <button id="btn-close-detail" class="btn btn-small">×</button>
+            </div>
+            
+            <div class="lands-section">
+                <h3>🌾 土地状态 (<span id="lands-count">0</span>块)</h3>
+                <div id="lands-grid" class="lands-grid"></div>
+                <div class="lands-legend">
+                    <span class="legend-item ready">🥕 成熟</span>
+                    <span class="legend-item growing">🌱 生长中</span>
+                    <span class="legend-item needsWater">💧 缺水</span>
+                    <span class="legend-item needsWeed">🌿 有草</span>
+                    <span class="legend-item needsInsect">🐛 有虫</span>
+                    <span class="legend-item empty">⬜ 空地</span>
+                    <span class="legend-item locked">⬛ 锁定</span>
+                </div>
+            </div>
+            
+            <!-- 日志区域 -->
+            <div class="logs-section">
+                <h3>📋 运行日志</h3>
+                <div id="account-logs" class="account-logs"></div>
+            </div>
+        </div>
+    </main>
+    
+    <div id="modal-add" class="modal hidden">
+        <div class="modal-content">
+            <h2>添加账号</h2>
+            
+            <!-- 扫码区域 -->
+            <div id="scan-add-section" class="scan-add-section hidden">
+                <img id="scan-add-qrcode" src="" alt="二维码">
+                <p id="scan-add-status">等待扫码中...</p>
+                <button id="btn-scan-add-cancel" class="btn btn-cancel">取消</button>
+            </div>
+            
+            <!-- 添加表单 -->
+            <form id="form-add">
+                <div class="form-group">
+                    <label>账号名称 *</label>
+                    <input type="text" name="name" required placeholder="扫码后自动获取">
+                </div>
+                <div class="form-group">
+                    <label>登录 Code *</label>
+                    <input type="text" name="code" required placeholder="扫码后自动获取">
+                </div>
+                <div class="form-group">
+                    <label>平台</label>
+                    <select name="platform">
+                        <option value="qq">QQ 小程序</option>
+                        <option value="wx">微信小程序</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="btn-scan-in-add" class="btn btn-info">扫码添加</button>
+                    <button type="submit" class="btn btn-success">添加</button>
+                    <button type="button" class="btn btn-cancel btn-add-cancel">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="modal-edit" class="modal hidden">
+        <div class="modal-content">
+            <h2>编辑账号配置</h2>
+            <form id="form-edit">
+                <input type="hidden" name="accountId">
+                <div class="form-group">
+                    <label>账号名称</label>
+                    <input type="text" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label>登录 Code</label>
+                    <input type="text" name="code" required>
+                </div>
+                <div class="form-group">
+                    <label>平台</label>
+                    <select name="platform">
+                        <option value="qq">QQ 小程序</option>
+                        <option value="wx">微信小程序</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>农场巡查间隔(秒)</label>
+                        <input type="number" name="farmInterval" min="1" value="10">
+                    </div>
+                    <div class="form-group">
+                        <label>好友巡查间隔(秒)</label>
+                        <input type="number" name="friendInterval" min="1" value="1">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" name="autoSell" checked>
+                        自动出售果实
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">保存配置</button>
+                    <button type="button" class="btn btn-cancel btn-edit-cancel">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="modal-config" class="modal hidden">
+        <div class="modal-content">
+            <h2>账号配置</h2>
+            <form id="form-config">
+                <input type="hidden" name="accountId">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>农场间隔(秒)</label>
+                        <input type="number" name="farmInterval" min="1" value="1">
+                    </div>
+                    <div class="form-group">
+                        <label>好友间隔(秒)</label>
+                        <input type="number" name="friendInterval" min="1" value="2">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>种子选择 (点击选择，推荐种子标★)</label>
+                    <div id="seed-selection" class="seed-selection"></div>
+                </div>
+                
+                <!-- 好友互动 -->
+                <div class="form-group checkbox-label">
+                    <input type="checkbox" name="autoFriend">
+                    <strong>好友互动</strong>
+                    <span class="text-muted">（帮助好友、除草/除虫/浇水、给好友放虫）</span>
+                </div>
+                
+                <!-- 自动偷菜 -->
+                <div class="form-group checkbox-label">
+                    <input type="checkbox" name="autoSteal">
+                    <strong>自动偷菜</strong>
+                </div>
+                
+                <!-- 自动领取 -->
+                <div class="form-group checkbox-label">
+                    <input type="checkbox" name="autoClaim">
+                    <strong>自动领取</strong>
+                    <span class="text-muted">（任务、免费礼包、分享奖励、月卡、邮箱、会员、图鉴）</span>
+                </div>
+                
+                <!-- 自动农作 -->
+                <div class="form-group checkbox-label">
+                    <input type="checkbox" name="autoFarm">
+                    自动种植/收获
+                </div>
+                <div class="form-group checkbox-label">
+                    <input type="checkbox" name="autoFertilize">
+                    自动施肥
+                </div>
+                <div class="form-group checkbox-label">
+                    <input type="checkbox" name="autoLandUnlock">
+                    自动解锁土地
+                </div>
+                <div class="form-group checkbox-label">
+                    <input type="checkbox" name="autoLandUpgrade">
+                    自动升级土地
+                </div>
+                <div class="form-group checkbox-label">
+                    <input type="checkbox" name="autoSell">
+                    自动出售果实
+                </div>
+                <div class="form-group checkbox-label">
+                    <input type="checkbox" name="autoBuyFertilizer">
+                    自动购买化肥
+                </div>
+                <div class="form-group checkbox-label">
+                    <input type="checkbox" name="autoUseFertilizer">
+                    自动使用化肥
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">保存</button>
+                    <button type="button" class="btn btn-cancel btn-config-cancel">取消</button>
+                </div>
+                
+                <div class="ranking-section">
+                    <h3>🏆 经验排行榜</h3>
+                    <div id="ranking-display" class="ranking-display">
+                        <p class="text-muted">选择账号后显示排行榜</p>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="modal-scan" class="modal hidden">
+        <div class="modal-content">
+            <h2>扫码登录</h2>
+            <div class="scan-content">
+                <img id="scan-qrcode" src="" alt="二维码" class="hidden">
+                <div id="scan-loading" class="scan-loading">加载中...</div>
+            </div>
+            <p id="scan-status" class="scan-status">等待扫码中...</p>
+            <div class="form-actions">
+                <button id="btn-cancel-scan" class="btn btn-cancel">取消</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="modal-delete" class="modal hidden">
+        <div class="modal-content">
+            <h2>确认删除</h2>
+            <p>确定要删除账号 <span id="delete-account-name" class="text-danger"></span> 吗？</p>
+            <p class="text-muted">此操作不可恢复，运行中的账号将被停止。</p>
+            <div class="form-actions">
+                <button id="btn-confirm-delete" class="btn btn-danger">确认删除</button>
+                <button id="btn-cancel-delete" class="btn btn-cancel">取消</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="toast" class="toast hidden"></div>
+    
+    <script src="/js/app.js"></script>
+</body>
+</html>
