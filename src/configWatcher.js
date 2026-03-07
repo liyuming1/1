@@ -164,22 +164,6 @@ function applyConfig(newConfig) {
         }
     }
 
-    if (newConfig.autoFertilizeNormal !== undefined) {
-        if (CONFIG.autoFertilizeNormal !== newConfig.autoFertilizeNormal) {
-            CONFIG.autoFertilizeNormal = newConfig.autoFertilizeNormal;
-            changed = true;
-            console.log(`[Config] 热更新: autoFertilizeNormal=${newConfig.autoFertilizeNormal}`);
-        }
-    }
-
-    if (newConfig.autoFertilizeOrganic !== undefined) {
-        if (CONFIG.autoFertilizeOrganic !== newConfig.autoFertilizeOrganic) {
-            CONFIG.autoFertilizeOrganic = newConfig.autoFertilizeOrganic;
-            changed = true;
-            console.log(`[Config] 热更新: autoFertilizeOrganic=${newConfig.autoFertilizeOrganic}`);
-        }
-    }
-
     if (newConfig.forceLowestLevelCrop !== undefined) {
         if (CONFIG.forceLowestLevelCrop !== newConfig.forceLowestLevelCrop) {
             CONFIG.forceLowestLevelCrop = newConfig.forceLowestLevelCrop;
@@ -233,22 +217,6 @@ function applyConfig(newConfig) {
             CONFIG.autoBuyFertilizer = newConfig.autoBuyFertilizer;
             changed = true;
             console.log(`[Config] 热更新: autoBuyFertilizer=${newConfig.autoBuyFertilizer}`);
-        }
-    }
-
-    if (newConfig.autoBuyFertilizerNormal !== undefined) {
-        if (CONFIG.autoBuyFertilizerNormal !== newConfig.autoBuyFertilizerNormal) {
-            CONFIG.autoBuyFertilizerNormal = newConfig.autoBuyFertilizerNormal;
-            changed = true;
-            console.log(`[Config] 热更新: autoBuyFertilizerNormal=${newConfig.autoBuyFertilizerNormal}`);
-        }
-    }
-
-    if (newConfig.autoBuyFertilizerOrganic !== undefined) {
-        if (CONFIG.autoBuyFertilizerOrganic !== newConfig.autoBuyFertilizerOrganic) {
-            CONFIG.autoBuyFertilizerOrganic = newConfig.autoBuyFertilizerOrganic;
-            changed = true;
-            console.log(`[Config] 热更新: autoBuyFertilizerOrganic=${newConfig.autoBuyFertilizerOrganic}`);
         }
     }
 

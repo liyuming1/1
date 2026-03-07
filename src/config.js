@@ -104,14 +104,10 @@ const CONFIG = {
     // 自动农作（种植/收获/铲除/浇水/除虫/除草）
     autoFarm: false,
     autoFertilize: false,       // 自动施肥
-    autoFertilizeNormal: false, // 普通肥
-    autoFertilizeOrganic: false, // 有机肥
     autoLandUnlock: false,      // 自动解锁土地
     autoLandUpgrade: false,     // 自动升级土地
     autoSell: false,            // 自动出售果实
     autoBuyFertilizer: false,   // 购买化肥
-    autoBuyFertilizerNormal: false, // 购买普通肥
-    autoBuyFertilizerOrganic: false, // 购买有机肥
     autoUseFertilizer: false,   // 使用化肥
     
     notStealPlants: ['白萝卜','胡萝卜','大白菜','大蒜','大葱'],  // 不偷的植物
@@ -132,14 +128,10 @@ function validateConfig(config) {
         autoClaim: false,
         autoFarm: false,
         autoFertilize: false,
-        autoFertilizeNormal: false,
-        autoFertilizeOrganic: false,
         autoLandUnlock: false,
         autoLandUpgrade: false,
         autoSell: false,
         autoBuyFertilizer: false,
-        autoBuyFertilizerNormal: false,
-        autoBuyFertilizerOrganic: false,
         autoUseFertilizer: false,
         forceLowestLevelCrop: false,
         farmCheckInterval: 1000,

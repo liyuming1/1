@@ -239,15 +239,10 @@ async function main() {
                 }
                 
                 // 购买化肥热更新
-                if (newConfig.autoBuyFertilizer !== undefined || newConfig.autoBuyFertilizerNormal !== undefined || newConfig.autoBuyFertilizerOrganic !== undefined) {
-                    const buyNormal = newConfig.autoBuyFertilizerNormal !== undefined ? newConfig.autoBuyFertilizerNormal : CONFIG.autoBuyFertilizerNormal;
-                    const buyOrganic = newConfig.autoBuyFertilizerOrganic !== undefined ? newConfig.autoBuyFertilizerOrganic : CONFIG.autoBuyFertilizerOrganic;
-                    if ((newConfig.autoBuyFertilizer || CONFIG.autoBuyFertilizer) && (buyNormal || buyOrganic)) {
+                if (newConfig.autoBuyFertilizer !== undefined) {
+                    if (newConfig.autoBuyFertilizer) {
                         const { buyFertilizer } = require('./src/warehouse');
-                        if (buyFertilizer) {
-                            if (buyNormal) buyFertilizer(1).catch(() => {});
-                            if (buyOrganic) buyFertilizer(2).catch(() => {});
-                        }
+                        if (buyFertilizer) buyFertilizer().catch(() => {});
                     }
                 }
                 

@@ -430,56 +430,54 @@ async function visitFriend(friend, totalActions, myGid) {
     // 执行操作
     const actions = [];
 
-    // 帮助操作: 只在autoFriend开启时执行
-    if (CONFIG.autoFriend) {
-        if (status.needWeed.length > 0) {
-            const shouldHelp = !HELP_ONLY_WITH_EXP || canGetExp(10005);  // 10005=除草
-            if (shouldHelp) {
-                markExpCheck(10005);
-                let ok = 0;
-                for (const landId of status.needWeed) {
-                    try { await helpWeed(gid, [landId]); ok++; } catch (e) { /* ignore */ }
-                    await sleep(100);
-                }
-                if (ok > 0) { 
-                    actions.push(`草${ok}`); 
-                    totalActions.weed += ok;
-                    reporter.reportStats({ helpWeed: ok });
-                }
+    // 帮助操作: 只在有经验时执行 (如果启用了 HELP_ONLY_WITH_EXP)
+    if (status.needWeed.length > 0) {
+        const shouldHelp = !HELP_ONLY_WITH_EXP || canGetExp(10005);  // 10005=除草
+        if (shouldHelp) {
+            markExpCheck(10005);
+            let ok = 0;
+            for (const landId of status.needWeed) {
+                try { await helpWeed(gid, [landId]); ok++; } catch (e) { /* ignore */ }
+                await sleep(100);
+            }
+            if (ok > 0) { 
+                actions.push(`草${ok}`); 
+                totalActions.weed += ok;
+                reporter.reportStats({ helpWeed: ok });
             }
         }
+    }
 
-        if (status.needBug.length > 0) {
-            const shouldHelp = !HELP_ONLY_WITH_EXP || canGetExp(10006);  // 10006=除虫
-            if (shouldHelp) {
-                markExpCheck(10006);
-                let ok = 0;
-                for (const landId of status.needBug) {
-                    try { await helpInsecticide(gid, [landId]); ok++; } catch (e) { /* ignore */ }
-                    await sleep(100);
-                }
-                if (ok > 0) { 
-                    actions.push(`虫${ok}`); 
-                    totalActions.bug += ok;
-                    reporter.reportStats({ helpPest: ok });
-                }
+    if (status.needBug.length > 0) {
+        const shouldHelp = !HELP_ONLY_WITH_EXP || canGetExp(10006);  // 10006=除虫
+        if (shouldHelp) {
+            markExpCheck(10006);
+            let ok = 0;
+            for (const landId of status.needBug) {
+                try { await helpInsecticide(gid, [landId]); ok++; } catch (e) { /* ignore */ }
+                await sleep(100);
+            }
+            if (ok > 0) { 
+                actions.push(`虫${ok}`); 
+                totalActions.bug += ok;
+                reporter.reportStats({ helpPest: ok });
             }
         }
+    }
 
-        if (status.needWater.length > 0) {
-            const shouldHelp = !HELP_ONLY_WITH_EXP || canGetExp(10007);  // 10007=浇水
-            if (shouldHelp) {
-                markExpCheck(10007);
-                let ok = 0;
-                for (const landId of status.needWater) {
-                    try { await helpWater(gid, [landId]); ok++; } catch (e) { /* ignore */ }
-                    await sleep(100);
-                }
-                if (ok > 0) { 
-                    actions.push(`水${ok}`); 
-                    totalActions.water += ok;
-                    reporter.reportStats({ helpWater: ok });
-                }
+    if (status.needWater.length > 0) {
+        const shouldHelp = !HELP_ONLY_WITH_EXP || canGetExp(10007);  // 10007=浇水
+        if (shouldHelp) {
+            markExpCheck(10007);
+            let ok = 0;
+            for (const landId of status.needWater) {
+                try { await helpWater(gid, [landId]); ok++; } catch (e) { /* ignore */ }
+                await sleep(100);
+            }
+            if (ok > 0) { 
+                actions.push(`水${ok}`); 
+                totalActions.water += ok;
+                reporter.reportStats({ helpWater: ok });
             }
         }
     }
