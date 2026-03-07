@@ -126,6 +126,7 @@ async function checkAndClaimTasks() {
  */
 function onTaskInfoNotify(taskInfo) {
     if (!taskInfo) return;
+    if (!CONFIG.autoClaim) return;
 
     const allTasks = [
         ...(taskInfo.growth_tasks || []),
@@ -199,7 +200,18 @@ function initTaskSystem() {
             if (!CONFIG.autoBuyFertilizer) return;
             try {
                 const warehouse = require('./warehouse');
-                await warehouse.buyFertilizer();
+                const buyNormal = CONFIG.autoBuyFertilizerNormal;
+                const buyOrganic = CONFIG.autoBuyFertilizerOrganic;
+                // 只有开启子开关时才购买
+                if (buyNormal) {
+                    await warehouse.buyFertilizer(1);
+                }
+                if (buyOrganic) {
+                    await warehouse.buyFertilizer(2);
+                }
+                if (!buyNormal && !buyOrganic) {
+                    log('商城', '未选择购买化肥类型');
+                }
             } catch (e) { /* 静默失败 */ }
         }, 60000);
     }, 45000);

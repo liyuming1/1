@@ -461,24 +461,29 @@ async function autoPlantEmptyLands(deadLandIds, emptyLandIds, unlockedLandCount)
     }
 
     // 5. 施肥（逐块拖动，间隔50ms）- 受autoFertilize开关控制
-    // 需求：一次种植循环里，先普通肥，再有机肥
     // 注意：购买化肥和使用化肥容器已分离到 task.js 定时处理
     
     if (CONFIG.autoFertilize && plantedLands.length > 0) {
-        // 先普通肥
-        const normalCount = await fertilize(plantedLands, NORMAL_FERTILIZER_ID);
-        if (normalCount > 0) {
-            log('施肥', `普通肥：${normalCount}/${plantedLands.length}`);
+        // 根据开关决定施哪种肥
+        const useNormal = CONFIG.autoFertilizeNormal;
+        const useOrganic = CONFIG.autoFertilizeOrganic;
+        
+        if (useNormal) {
+            const normalCount = await fertilize(plantedLands, NORMAL_FERTILIZER_ID);
+            if (normalCount > 0) {
+                log('施肥', `普通肥：${normalCount}/${plantedLands.length}`);
+            }
         }
-
-        // 再有机肥（对同一批地再施一次）
-        const organicCount = await fertilize(plantedLands, ORGANIC_FERTILIZER_ID);
-        if (organicCount > 0) {
-            log('施肥', `有机肥：${organicCount}/${plantedLands.length}`);
+        
+        if (useOrganic) {
+            const organicCount = await fertilize(plantedLands, ORGANIC_FERTILIZER_ID);
+            if (organicCount > 0) {
+                log('施肥', `有机肥：${organicCount}/${plantedLands.length}`);
+            }
         }
-
-        if (normalCount === 0 && organicCount === 0) {
-            logWarn('施肥', '普通肥/有机肥均未施肥成功（可能肥料不足或接口限制）');
+        
+        if (!useNormal && !useOrganic) {
+            logWarn('施肥', '未选择任何施肥类型');
         }
     }
 }
