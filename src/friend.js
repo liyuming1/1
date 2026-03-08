@@ -597,14 +597,8 @@ async function checkFriends() {
         const friends = friendsReply.game_friends || [];
         if (friends.length === 0) { log('好友', '没有好友'); return; }
 
-        // 检查帮助经验是否还有
-        const canHelpWithExp = !HELP_ONLY_WITH_EXP || canGetExp(10005) || canGetExp(10006) || canGetExp(10007);
-        // 检查是否还有捣乱次数 (放虫/放草)
-        const canPutBugOrWeed = canOperate(10004) || canOperate(10003);  // 10004=放虫, 10003=放草
-
-        // 分两类：有预览信息的优先访问，其他的放后面（用于放虫放草）
-        const priorityFriends = [];  // 有可偷/可帮助的好友
-        const otherFriends = [];     // 其他好友（仅用于放虫放草）
+        // 只访问有可偷菜作物的好友
+        const priorityFriends = [];
         const visitedGids = new Set();
         
         for (const f of friends) {
@@ -629,33 +623,24 @@ async function checkFriends() {
             }
 
             if (hasSteal) {
-                // 有可偷的，始终加入
+                // 有可偷的，加入待访问列表
                 priorityFriends.push({ gid, name, level: toNum(f.level), hasSteal: true, hasHelp });
                 visitedGids.add(gid);
-            } else if (hasHelp && canHelpWithExp) {
-                // 只有帮助项且还能获得经验时才加入
-                priorityFriends.push({ gid, name, level: toNum(f.level), hasSteal: false, hasHelp: true });
-                visitedGids.add(gid);
-            } else if (isPutBadThingsEnabled() && canPutBugOrWeed) {
-                // 没有预览信息但可以放虫放草（仅在开启放虫放草功能时）
-                otherFriends.push({ gid, name, level: toNum(f.level), hasSteal: false, hasHelp: false });
-                visitedGids.add(gid);
             }
+            // 不再访问无偷菜作物的好友（帮助好友在visitFriend中通过autoFriend开关控制）
 
             if (showDebug && visitedGids.has(gid)) {
                 console.log(`[调试] 好友 [${name}] 加入列表 (位置: ${priorityFriends.length})`);
             }
         }
         
-        // 合并列表：优先好友在前
-        const friendsToVisit = [...priorityFriends, ...otherFriends];
+        const friendsToVisit = priorityFriends;
         
         // 调试：检查目标好友位置
         if (DEBUG_FRIEND_LANDS && typeof DEBUG_FRIEND_LANDS === 'string') {
             const idx = friendsToVisit.findIndex(f => f.name === DEBUG_FRIEND_LANDS);
             if (idx >= 0) {
-                const inPriority = idx < priorityFriends.length;
-                console.log(`[调试] 好友 [${DEBUG_FRIEND_LANDS}] 位置: ${idx + 1}/${friendsToVisit.length} (${inPriority ? '优先列表' : '其他列表'})`);
+                console.log(`[调试] 好友 [${DEBUG_FRIEND_LANDS}] 位置: ${idx + 1}/${friendsToVisit.length}`);
             } else {
                 console.log(`[调试] 好友 [${DEBUG_FRIEND_LANDS}] 不在待访问列表中!`);
             }

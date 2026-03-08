@@ -9,6 +9,7 @@ const { types } = require('./proto');
 const { toLong, toNum, syncServerTime, log, logWarn } = require('./utils');
 const { updateStatusFromLogin, updateStatusGold, updateStatusLevel } = require('./status');
 const reporter = require('./reporter');
+const { initWasm, generateToken, encryptBuffer, decryptBuffer } = require('./utils/crypto-wasm');
 
 // ============ 事件发射器 (用于推送通知) ============
 const networkEvents = new EventEmitter();
@@ -33,7 +34,11 @@ const userState = {
 function getUserState() { return userState; }
 
 // ============ 消息编解码 ============
-function encodeMsg(serviceName, methodName, bodyBytes) {
+async function encodeMsg(serviceName, methodName, bodyBytes) {
+    let finalBody = bodyBytes || Buffer.alloc(0);
+    if (finalBody.length > 0) {
+        finalBody = await encryptBuffer(finalBody);
+    }
     const msg = types.GateMessage.create({
         meta: {
             service_name: serviceName,
@@ -42,28 +47,28 @@ function encodeMsg(serviceName, methodName, bodyBytes) {
             client_seq: toLong(clientSeq),
             server_seq: toLong(serverSeq),
         },
-        body: bodyBytes || Buffer.alloc(0),
+        body: finalBody,
     });
     const encoded = types.GateMessage.encode(msg).finish();
     clientSeq++;
     return encoded;
 }
 
-function sendMsg(serviceName, methodName, bodyBytes, callback) {
+async function sendMsg(serviceName, methodName, bodyBytes, callback) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         log('WS', '连接未打开');
         return false;
     }
     const seq = clientSeq;
-    const encoded = encodeMsg(serviceName, methodName, bodyBytes);
+    const encoded = await encodeMsg(serviceName, methodName, bodyBytes);
     if (callback) pendingCallbacks.set(seq, callback);
     ws.send(encoded);
     return true;
 }
 
 /** Promise 版发送 */
-function sendMsgAsync(serviceName, methodName, bodyBytes, timeout = 10000) {
-    return new Promise((resolve, reject) => {
+async function sendMsgAsync(serviceName, methodName, bodyBytes, timeout = 10000) {
+    return new Promise(async (resolve, reject) => {
         // 检查连接状态
         if (!ws || ws.readyState !== WebSocket.OPEN) {
             reject(new Error(`连接未打开: ${methodName}`));
@@ -78,7 +83,7 @@ function sendMsgAsync(serviceName, methodName, bodyBytes, timeout = 10000) {
             reject(new Error(`请求超时: ${methodName} (seq=${seq}, pending=${pending})`));
         }, timeout);
 
-        const sent = sendMsg(serviceName, methodName, bodyBytes, (err, body, meta) => {
+        const sent = await sendMsg(serviceName, methodName, bodyBytes, (err, body, meta) => {
             clearTimeout(timer);
             if (err) reject(err);
             else resolve({ body, meta });
@@ -92,10 +97,21 @@ function sendMsgAsync(serviceName, methodName, bodyBytes, timeout = 10000) {
 }
 
 // ============ 消息处理 ============
-function handleMessage(data) {
+async function handleMessage(data) {
     try {
         const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
         const msg = types.GateMessage.decode(buf);
+        
+        // 解密消息体
+        let body = msg.body;
+        if (body && body.length > 0) {
+            try {
+                body = await decryptBuffer(body);
+            } catch (e) {
+                // 解密失败，使用原始数据
+            }
+        }
+        
         const meta = msg.meta;
         if (!meta) return;
 
@@ -464,7 +480,8 @@ function startHeartbeat() {
 }
 
 // ============ WebSocket 连接 ============
-function connect(code, onLoginSuccess) {
+async function connect(code, onLoginSuccess) {
+    await initWasm();
     const url = `${CONFIG.serverUrl}?platform=${CONFIG.platform}&os=${CONFIG.os}&ver=${CONFIG.clientVersion}&code=${code}&openID=`;
 
     ws = new WebSocket(url, {
