@@ -174,9 +174,15 @@ function stopSellLoop() {
 // ============ 化肥购买/使用 ============
 
 const FERTILIZER_ITEM_ID = 1011;  // 化肥ID
+const FERTILIZER_NORMAL_ID = 1003;  // 普通化肥ID
+const FERTILIZER_ORGANIC_ID = 1002; // 有机化肥ID
 const { getUserState } = require('./network');
 
-async function buyFertilizer() {
+async function buyFertilizer(type = 2) {
+    // type: 1=普通肥, 2=有机肥
+    const targetId = type === 1 ? FERTILIZER_NORMAL_ID : FERTILIZER_ORGANIC_ID;
+    const typeName = type === 1 ? '普通' : '有机';
+    
     const { toLong } = require('./utils');
     try {
         // 获取商城列表
@@ -187,12 +193,12 @@ async function buyFertilizer() {
         const reply = types.GetMallListBySlotTypeResponse.decode(replyBody);
         const goodsList = reply.goods_list || [];
 
-        // 查找有机化肥商品 (goods_id = 1003)
+        // 查找化肥商品
         let fertilizerGoods = null;
         for (const goodsBytes of goodsList) {
             try {
                 const goods = types.MallGoods.decode(goodsBytes);
-                if (goods.goods_id === 1003) {
+                if (goods.goods_id === targetId) {
                     fertilizerGoods = goods;
                     break;
                 }
@@ -200,7 +206,7 @@ async function buyFertilizer() {
         }
 
         if (!fertilizerGoods) {
-            log('商城', '未找到化肥商品');
+            log('商城', `未找到${typeName}化肥商品`);
             return false;
         }
 
@@ -217,10 +223,10 @@ async function buyFertilizer() {
             types.PurchaseRequest.create({ goods_id: fertilizerGoods.goods_id, count: 1 })
         ).finish();
         await sendMsgAsync('gamepb.mallpb.MallService', 'Purchase', purchaseReq);
-        log('商城', '购买化肥成功');
+        log('商城', `购买${typeName}化肥成功`);
         return true;
     } catch (e) {
-        logWarn('商城', `购买化肥失败: ${e.message}`);
+        logWarn('商城', `购买${typeName}化肥失败: ${e.message}`);
         throw e;
     }
 }

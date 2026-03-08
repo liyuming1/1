@@ -144,8 +144,6 @@ function csvCell(v) {
 }
 
 function buildRows(rawSeeds, lands, seedPhaseReduceMap) {
-    const plantSecondsNoFert = lands / NO_FERT_PLANT_SPEED_PER_SEC;
-    const plantSecondsNormalFert = lands / NORMAL_FERT_PLANT_SPEED_PER_SEC;
     const rows = [];
     let skipped = 0;
     let missingPhaseReduceCount = 0;
@@ -157,27 +155,57 @@ function buildRows(rawSeeds, lands, seedPhaseReduceMap) {
         const price = toNum(s.price, 0);
         const expHarvest = toNum(s.exp, 0);
         const growTimeSec = toNum(s.growTimeSec || s.growTime || s.grow_time || 0, 0);
+        const seasons = toNum(s.seasons || 1, 1); // 读取 seasons 字段，默认1
 
         if (seedId <= 0 || growTimeSec <= 0) {
             skipped++;
             continue;
         }
 
-        const expPerCycle = expHarvest;
+        let expPerCycle, cycleSecNoFert, cycleSecNormalFert, farmExpPerHourNoFert, farmExpPerHourNormalFert;
         const reduceSec = toNum(seedPhaseReduceMap.get(seedId), 0);
         if (reduceSec <= 0) missingPhaseReduceCount++;
-        const growTimeNormalFert = calcEffectiveGrowTime(growTimeSec, seedId, seedPhaseReduceMap);
 
-        // 整个农场一轮 = 生长时间 + 本轮全部地块种植耗时
-        const cycleSecNoFert = growTimeSec + plantSecondsNoFert;
-        const cycleSecNormalFert = growTimeNormalFert + plantSecondsNormalFert;
+        if (seasons === 2) {
+            // 双季作物：计算两季总经验
+            const growTimeSec1 = growTimeSec; // 第一季
+            const growTimeSec2 = growTimeSec / 2; // 第二季是一半
+            const expTotal = expHarvest * 2; // 两季总经验
+            
+            const growTimeNormalFert1 = calcEffectiveGrowTime(growTimeSec1, seedId, seedPhaseReduceMap);
+            const growTimeNormalFert2 = calcEffectiveGrowTime(growTimeSec2, seedId, seedPhaseReduceMap);
+            
+            // 两季总周期 = 第一季 + 第二季
+            cycleSecNoFert = growTimeSec1 + growTimeSec2;
+            cycleSecNormalFert = growTimeNormalFert1 + growTimeNormalFert2;
+            
+            expPerCycle = expTotal;
+            farmExpPerHourNoFert = (lands * expTotal / cycleSecNoFert) * 3600;
+            farmExpPerHourNormalFert = (lands * expTotal / cycleSecNormalFert) * 3600;
+        } else {
+            // 单季作物
+            expPerCycle = expHarvest;
+            const growTimeNormalFert = calcEffectiveGrowTime(growTimeSec, seedId, seedPhaseReduceMap);
+            
+            cycleSecNoFert = growTimeSec;
+            cycleSecNormalFert = growTimeNormalFert;
+            
+            farmExpPerHourNoFert = (lands * expPerCycle / cycleSecNoFert) * 3600;
+            farmExpPerHourNormalFert = (lands * expPerCycle / cycleSecNormalFert) * 3600;
+        }
 
-        const farmExpPerHourNoFert = (lands * expPerCycle / cycleSecNoFert) * 3600;
-        const farmExpPerHourNormalFert = (lands * expPerCycle / cycleSecNormalFert) * 3600;
         const gainPercent = farmExpPerHourNoFert > 0
             ? ((farmExpPerHourNormalFert - farmExpPerHourNoFert) / farmExpPerHourNoFert) * 100
             : 0;
         const expPerGoldSeed = price > 0 ? expPerCycle / price : 0;
+        
+        // 计算普通肥后的生长时间（用于显示）
+        let growTimeNormalFert;
+        if (seasons === 2) {
+            growTimeNormalFert = calcEffectiveGrowTime(growTimeSec, seedId, seedPhaseReduceMap) * 1.5; // 两季平均
+        } else {
+            growTimeNormalFert = calcEffectiveGrowTime(growTimeSec, seedId, seedPhaseReduceMap);
+        }
 
         rows.push({
             seedId,
@@ -187,6 +215,7 @@ function buildRows(rawSeeds, lands, seedPhaseReduceMap) {
             requiredLevel,
             unlocked: !!s.unlocked,
             price,
+            seasons,
             expHarvest,
             expPerCycle,
             growTimeSec,
@@ -207,7 +236,7 @@ function buildRows(rawSeeds, lands, seedPhaseReduceMap) {
         });
     }
 
-    return { rows, skipped, plantSecondsNoFert, plantSecondsNormalFert, missingPhaseReduceCount };
+    return { rows, skipped, missingPhaseReduceCount };
 }
 
 function pickTop(rows, key, topN) {
@@ -279,10 +308,6 @@ function writeSummaryTxt(outPath, opts, meta, topNo, topFert, levelInfo) {
     lines.push(`数据源: ${meta.input}`);
     lines.push(`导出时间: ${new Date().toISOString()}`);
     lines.push(`地块数: ${opts.lands}`);
-    lines.push(`种植速度(不施肥): ${NO_FERT_PLANTS_PER_2_SEC}块/${2}s (${NO_FERT_PLANT_SPEED_PER_SEC}块/s)`);
-    lines.push(`种植速度(普通肥): ${NORMAL_FERT_PLANTS_PER_2_SEC}块/${2}s (${NORMAL_FERT_PLANT_SPEED_PER_SEC}块/s)`);
-    lines.push(`整场种植耗时(不施肥): ${formatSec(meta.plantSecondsNoFert)}`);
-    lines.push(`整场种植耗时(普通肥): ${formatSec(meta.plantSecondsNormalFert)}`);
     lines.push(`普通肥规则: 直接减少一个生长阶段（按 Plant.json 的首个阶段时长）`);
     lines.push(`缺少阶段配置的种子数: ${meta.missingPhaseReduceCount}`);
     lines.push('');
@@ -323,7 +348,7 @@ function analyzeExpYield(opts = {}) {
     const inputAbs = path.resolve(input);
     const rawSeeds = readSeeds(inputAbs);
     const seedPhaseReduceMap = loadSeedPhaseReduceMap();
-    const { rows, skipped, plantSecondsNoFert, plantSecondsNormalFert, missingPhaseReduceCount } = buildRows(rawSeeds, lands, seedPhaseReduceMap);
+    const { rows, skipped, missingPhaseReduceCount } = buildRows(rawSeeds, lands, seedPhaseReduceMap);
 
     if (rows.length === 0) {
         throw new Error('没有可计算的种子数据（请检查输入文件）');
@@ -343,10 +368,6 @@ function analyzeExpYield(opts = {}) {
         input: inputAbs,
         config: {
             lands,
-            plantSpeedPerSecNoFert: NO_FERT_PLANT_SPEED_PER_SEC,
-            plantSpeedPerSecNormalFert: NORMAL_FERT_PLANT_SPEED_PER_SEC,
-            plantSecondsNoFert,
-            plantSecondsNormalFert,
             fertilizer: {
                 mode: 'minus_one_phase',
             },
@@ -418,6 +439,7 @@ function getPlantingRecommendation(level, lands, opts = {}) {
             seedId: r.seedId,
             name: r.name,
             requiredLevel: r.requiredLevel,
+            seasons: r.seasons,
             expPerHour: Number(r.farmExpPerHourNormalFert.toFixed(4)),
             gainPercent: Number(r.gainPercent.toFixed(4)),
         })),

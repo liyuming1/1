@@ -283,12 +283,17 @@ class AccountManager {
                     // 自动农作
                     autoFarm: acc.config.autoFarm,
                     autoFertilize: acc.config.autoFertilize,
+                    autoFertilizeNormal: acc.config.autoFertilizeNormal,
+                    autoFertilizeOrganic: acc.config.autoFertilizeOrganic,
                     autoLandUnlock: acc.config.autoLandUnlock,
                     autoLandUpgrade: acc.config.autoLandUpgrade,
                     autoSell: acc.config.autoSell,
                     autoBuyFertilizer: acc.config.autoBuyFertilizer,
+                    autoBuyFertilizerNormal: acc.config.autoBuyFertilizerNormal,
+                    autoBuyFertilizerOrganic: acc.config.autoBuyFertilizerOrganic,
                     autoUseFertilizer: acc.config.autoUseFertilizer,
-                    selectedSeed: acc.config.selectedSeed
+                    selectedSeed: acc.config.selectedSeed,
+                    notStealPlants: acc.config.notStealPlants || []
                 }
             }));
             res.json(list);
@@ -314,7 +319,7 @@ class AccountManager {
 
         // 创建账号
         this.app.post('/api/accounts', (req, res) => {
-            const { name, code, platform, farmInterval, friendInterval, harvestDelay, stealDelay, autoSell, autoFriend, autoSteal, autoClaim, autoFarm, autoFertilize, autoLandUnlock, autoLandUpgrade, autoBuyFertilizer, autoUseFertilizer } = req.body;
+            const { name, code, platform, farmInterval, friendInterval, harvestDelay, stealDelay, autoSell, autoFriend, autoSteal, autoClaim, autoFarm, autoFertilize, autoFertilizeNormal, autoFertilizeOrganic, autoLandUnlock, autoLandUpgrade, autoBuyFertilizer, autoUseFertilizer } = req.body;
             
             if (!code) {
                 return res.status(400).json({ error: '缺少必要参数: code' });
@@ -327,7 +332,7 @@ class AccountManager {
                 code,
                 platform: platform || 'qq',
                 farmInterval: farmInterval || 1,
-                friendInterval: friendInterval || 2,
+                friendInterval: friendInterval || 1,
                 harvestDelay: harvestDelay || 0,
                 stealDelay: stealDelay || 0,
                 // 好友互动
@@ -339,13 +344,18 @@ class AccountManager {
                 // 自动农作
                 autoFarm: false,
                 autoFertilize: false,
+                autoFertilizeNormal: false,
+                autoFertilizeOrganic: false,
                 autoLandUnlock: false,
                 autoLandUpgrade: false,
                 autoSell: false,
                 autoBuyFertilizer: false,
+                autoBuyFertilizerNormal: false,
+                autoBuyFertilizerOrganic: false,
                 autoUseFertilizer: false,
                 enabled: true,
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
+                notStealPlants: ['白萝卜','胡萝卜','大白菜','大蒜','大葱']
             };
 
             const acc = new AccountInstance(id, config, this);
@@ -741,6 +751,20 @@ class AccountManager {
             try {
                 const rec = getPlantingRecommendation(level, lands, { top: 100 });
                 res.json(rec);
+            } catch (e) {
+                res.status(500).json({ error: e.message });
+            }
+        });
+
+        // 获取所有植物名称列表
+        this.app.get('/api/plants', (req, res) => {
+            const fs = require('fs');
+            const path = require('path');
+            try {
+                const plantPath = path.join(__dirname, 'gameConfig', 'Plant.json');
+                const plantData = JSON.parse(fs.readFileSync(plantPath, 'utf8'));
+                const plantNames = [...new Set(plantData.map(p => p.name).filter(n => n))];
+                res.json({ plants: plantNames });
             } catch (e) {
                 res.status(500).json({ error: e.message });
             }

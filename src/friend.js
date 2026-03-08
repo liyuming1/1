@@ -430,54 +430,56 @@ async function visitFriend(friend, totalActions, myGid) {
     // 执行操作
     const actions = [];
 
-    // 帮助操作: 只在有经验时执行 (如果启用了 HELP_ONLY_WITH_EXP)
-    if (status.needWeed.length > 0) {
-        const shouldHelp = !HELP_ONLY_WITH_EXP || canGetExp(10005);  // 10005=除草
-        if (shouldHelp) {
-            markExpCheck(10005);
-            let ok = 0;
-            for (const landId of status.needWeed) {
-                try { await helpWeed(gid, [landId]); ok++; } catch (e) { /* ignore */ }
-                await sleep(100);
-            }
-            if (ok > 0) { 
-                actions.push(`草${ok}`); 
-                totalActions.weed += ok;
-                reporter.reportStats({ helpWeed: ok });
-            }
-        }
-    }
-
-    if (status.needBug.length > 0) {
-        const shouldHelp = !HELP_ONLY_WITH_EXP || canGetExp(10006);  // 10006=除虫
-        if (shouldHelp) {
-            markExpCheck(10006);
-            let ok = 0;
-            for (const landId of status.needBug) {
-                try { await helpInsecticide(gid, [landId]); ok++; } catch (e) { /* ignore */ }
-                await sleep(100);
-            }
-            if (ok > 0) { 
-                actions.push(`虫${ok}`); 
-                totalActions.bug += ok;
-                reporter.reportStats({ helpPest: ok });
+    // 帮助操作: 只在autoFriend开启时执行
+    if (CONFIG.autoFriend) {
+        if (status.needWeed.length > 0) {
+            const shouldHelp = !HELP_ONLY_WITH_EXP || canGetExp(10005);  // 10005=除草
+            if (shouldHelp) {
+                markExpCheck(10005);
+                let ok = 0;
+                for (const landId of status.needWeed) {
+                    try { await helpWeed(gid, [landId]); ok++; } catch (e) { /* ignore */ }
+                    await sleep(100);
+                }
+                if (ok > 0) { 
+                    actions.push(`草${ok}`); 
+                    totalActions.weed += ok;
+                    reporter.reportStats({ helpWeed: ok });
+                }
             }
         }
-    }
 
-    if (status.needWater.length > 0) {
-        const shouldHelp = !HELP_ONLY_WITH_EXP || canGetExp(10007);  // 10007=浇水
-        if (shouldHelp) {
-            markExpCheck(10007);
-            let ok = 0;
-            for (const landId of status.needWater) {
-                try { await helpWater(gid, [landId]); ok++; } catch (e) { /* ignore */ }
-                await sleep(100);
+        if (status.needBug.length > 0) {
+            const shouldHelp = !HELP_ONLY_WITH_EXP || canGetExp(10006);  // 10006=除虫
+            if (shouldHelp) {
+                markExpCheck(10006);
+                let ok = 0;
+                for (const landId of status.needBug) {
+                    try { await helpInsecticide(gid, [landId]); ok++; } catch (e) { /* ignore */ }
+                    await sleep(100);
+                }
+                if (ok > 0) { 
+                    actions.push(`虫${ok}`); 
+                    totalActions.bug += ok;
+                    reporter.reportStats({ helpPest: ok });
+                }
             }
-            if (ok > 0) { 
-                actions.push(`水${ok}`); 
-                totalActions.water += ok;
-                reporter.reportStats({ helpWater: ok });
+        }
+
+        if (status.needWater.length > 0) {
+            const shouldHelp = !HELP_ONLY_WITH_EXP || canGetExp(10007);  // 10007=浇水
+            if (shouldHelp) {
+                markExpCheck(10007);
+                let ok = 0;
+                for (const landId of status.needWater) {
+                    try { await helpWater(gid, [landId]); ok++; } catch (e) { /* ignore */ }
+                    await sleep(100);
+                }
+                if (ok > 0) { 
+                    actions.push(`水${ok}`); 
+                    totalActions.water += ok;
+                    reporter.reportStats({ helpWater: ok });
+                }
             }
         }
     }
@@ -485,29 +487,44 @@ async function visitFriend(friend, totalActions, myGid) {
     // 偷菜: 受autoSteal开关控制，且跳过黑名单植物
     if (CONFIG.autoSteal && status.stealable.length > 0) {
         const notStealPlants = CONFIG.notStealPlants || [];
-        let ok = 0;
+        
+        // 过滤掉不偷列表中的植物
+        const targetLands = [];
         const stolenPlants = [];
         for (let i = 0; i < status.stealable.length; i++) {
             const landId = status.stealable[i];
             const plantName = status.stealableInfo[i]?.name;
-            
-            // 检查是否在不偷列表中
             if (plantName && notStealPlants.includes(plantName)) {
                 continue;
             }
+            targetLands.push(landId);
+            if (status.stealableInfo[i]) {
+                stolenPlants.push(status.stealableInfo[i].name);
+            }
+        }
+        
+        let ok = 0;
+        if (targetLands.length > 0) {
+            // 尝试批量偷取
+            if (CONFIG.stealDelay > 0) {
+                await sleep(CONFIG.stealDelay * 1000);
+            }
             
             try {
-                if (CONFIG.stealDelay > 0) {
-                    await sleep(CONFIG.stealDelay * 1000);
+                await stealHarvest(gid, targetLands);
+                ok = targetLands.length;
+            } catch (e) {
+                // 批量失败，降级为单个偷取
+                for (const landId of targetLands) {
+                    try {
+                        await stealHarvest(gid, [landId]);
+                        ok++;
+                    } catch (e2) { /* ignore */ }
+                    await sleep(50);
                 }
-                await stealHarvest(gid, [landId]);
-                ok++;
-                if (status.stealableInfo[i]) {
-                    stolenPlants.push(status.stealableInfo[i].name);
-                }
-            } catch (e) { /* ignore */ }
-            await sleep(100);
+            }
         }
+        
         if (ok > 0) {
             const plantNames = [...new Set(stolenPlants)].join('/');
             actions.push(`偷${ok}${plantNames ? '(' + plantNames + ')' : ''}`);
@@ -663,7 +680,7 @@ async function checkFriends() {
                     console.log(`[调试] 访问 [${friend.name}] 出错: ${e.message}`);
                 }
             }
-            await sleep(500);
+            await sleep(200);
             // 如果捣乱次数用完了，且没有其他操作，可以提前结束
             if (!canOperate(10004) && !canOperate(10003)) {  // 10004=放虫, 10003=放草
                 // 继续巡查，但不再放虫放草
