@@ -7,7 +7,7 @@ const { CONFIG } = require('./config');
 const { types } = require('./proto');
 const { sendMsgAsync } = require('./network');
 const { toLong, toNum, log, logWarn } = require('./utils');
-const { getFruitName, getItemName } = require('./gameConfig');
+const { getFruitName, getItemName, getPlantByFruitId, getPlantBySeedId, getItemImageById, getItemInfoById } = require('./gameConfig');
 const seedShopData = require('../tools/seed-shop-merged-export.json');
 const reporter = require('./reporter');
 
@@ -250,12 +250,89 @@ async function useFertilizer(landId) {
     }
 }
 
+async function getBagDetail() {
+    const bagReply = await getBag();
+    const rawItems = getBagItems(bagReply);
+    const merged = new Map();
+    
+    for (const it of (rawItems || [])) {
+        const id = toNum(it.id);
+        const count = toNum(it.count);
+        if (id <= 0 || count <= 0) continue;
+        
+        let name = '';
+        let category = 'item';
+        
+        if (id === 1 || id === 1001) {
+            name = '金币';
+            category = 'gold';
+        } else if (id === 1002) {
+            name = '点券';
+            category = 'voucher';
+        } else if (id === 1101) {
+            name = '经验';
+            category = 'exp';
+        } else if (getPlantByFruitId(id)) {
+            name = `${getFruitName(id)}果实`;
+            category = 'fruit';
+        } else if (getPlantBySeedId(id)) {
+            const p = getPlantBySeedId(id);
+            name = p ? `${p.name}种子` : `种子${id}`;
+            category = 'seed';
+        } else {
+            name = getItemName(id);
+        }
+        
+        if (!name) name = `物品${id}`;
+        
+        const image = getItemImageById(id);
+        const info = getItemInfoById(id);
+        const interactionType = info && info.interaction_type ? String(info.interaction_type) : '';
+        
+        if (!merged.has(id)) {
+            merged.set(id, {
+                id,
+                count: 0,
+                uid: 0,
+                name,
+                image,
+                category,
+                itemType: info ? (Number(info.type) || 0) : 0,
+                price: info ? (Number(info.price) || 0) : 0,
+                level: info ? (Number(info.level) || 0) : 0,
+                interactionType,
+                hoursText: '',
+            });
+        }
+        const row = merged.get(id);
+        row.count += count;
+    }
+    
+    const items = Array.from(merged.values()).map((row) => {
+        if (row.interactionType === 'fertilizerbucket' && row.count > 0) {
+            const hoursFloor1 = Math.floor((row.count / 3600) * 10) / 10;
+            row.hoursText = `${hoursFloor1.toFixed(1)}小时`;
+        } else {
+            row.hoursText = '';
+        }
+        return row;
+    });
+    
+    items.sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return a.id - b.id;
+    });
+    
+    return { totalKinds: items.length, items };
+}
+
 module.exports = {
     getBag,
     sellItems,
     sellAllFruits,
     debugSellFruits,
     getBagItems,
+    getBagDetail,
     startSellLoop,
     stopSellLoop,
     buyFertilizer,

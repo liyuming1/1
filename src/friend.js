@@ -43,7 +43,7 @@ const OP_NAMES = {
 const HELP_ONLY_WITH_EXP = true; // 已更新可用
 
 function isPutBadThingsEnabled() {
-    return false;
+    return CONFIG.autoFriend === true;
 }
 
 // ============ 好友 API ============
@@ -622,8 +622,8 @@ async function checkFriends() {
                 console.log(`[调试] 好友列表预览 [${name}]: steal=${stealNum} dry=${dryNum} weed=${weedNum} insect=${insectNum}`);
             }
 
-            if (hasSteal) {
-                // 有可偷的，加入待访问列表
+            if (hasSteal || hasHelp) {
+                // 有可偷的或需要帮助的，加入待访问列表
                 priorityFriends.push({ gid, name, level: toNum(f.level), hasSteal: true, hasHelp });
                 visitedGids.add(gid);
             }

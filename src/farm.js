@@ -7,7 +7,7 @@ const { CONFIG, PlantPhase, PHASE_NAMES, getPlantPhaseNames, getPlantPhaseDurati
 const { types } = require('./proto');
 const { sendMsgAsync, getUserState, networkEvents } = require('./network');
 const { toLong, toNum, getServerTimeSec, toTimeSec, log, logWarn, sleep } = require('./utils');
-const { getPlantNameBySeedId, getPlantName, getPlantExp, formatGrowTime, getPlantGrowTime, getItemName } = require('./gameConfig');
+const { getPlantNameBySeedId, getPlantName, getPlantExp, formatGrowTime, getPlantGrowTime, getItemName, getPlantById, getItemImageById } = require('./gameConfig');
 const { getPlantingRecommendation, getExpRanking } = require('../tools/calc-exp-yield');
 const reporter = require('./reporter');
 const warehouse = require('./warehouse');
@@ -55,6 +55,63 @@ function serializeLands(landsReply) {
     const unlockedCount = lands.filter(l => l && l.unlocked).length;
     const serverTime = getServerTimeSec();
     
+    // 构建土地Map，用于合种查询
+    const landsMap = new Map();
+    for (const land of lands) {
+        if (land) {
+            landsMap.set(toNum(land.id), land);
+        }
+    }
+    
+    // 获取副地块ID列表
+    function getSlaveLandIds(land) {
+        const ids = Array.isArray(land?.slave_land_ids) ? land.slave_land_ids : [];
+        return [...new Set(ids.map(id => toNum(id)).filter(Boolean))];
+    }
+    
+    // 获取主地块
+    function getLinkedMasterLand(land) {
+        const landId = toNum(land?.id);
+        const masterLandId = toNum(land?.master_land_id);
+        if (!masterLandId || masterLandId === landId) return null;
+        
+        const masterLand = landsMap.get(masterLandId);
+        if (!masterLand) return null;
+        
+        const slaveIds = getSlaveLandIds(masterLand);
+        if (slaveIds.length > 0 && !slaveIds.includes(landId)) return null;
+        
+        return masterLand;
+    }
+    
+    // 检测土地是否有植物数据
+    function hasPlantData(land) {
+        const plant = land?.plant;
+        return !!(plant && Array.isArray(plant.phases) && plant.phases.length > 0);
+    }
+    
+    // 获取显示用的土地上下文
+    function getDisplayLandContext(land) {
+        const masterLand = getLinkedMasterLand(land);
+        if (masterLand && hasPlantData(masterLand)) {
+            const occupiedLandIds = [toNum(masterLand.id), ...getSlaveLandIds(masterLand)].filter(Boolean);
+            return {
+                sourceLand: masterLand,
+                occupiedByMaster: true,
+                masterLandId: toNum(masterLand.id),
+                occupiedLandIds: occupiedLandIds.length > 0 ? occupiedLandIds : [toNum(masterLand.id)].filter(Boolean),
+            };
+        }
+        
+        const selfId = toNum(land?.id);
+        return {
+            sourceLand: land,
+            occupiedByMaster: false,
+            masterLandId: selfId,
+            occupiedLandIds: [selfId].filter(Boolean),
+        };
+    }
+    
     return {
         accountId,
         lastUpdate: new Date().toISOString(),
@@ -62,8 +119,12 @@ function serializeLands(landsReply) {
         unlockedLands: unlockedCount,
         lands: lands.map(land => {
             if (!land) return null;
-            const plant = land.plant;
+            
+            const context = getDisplayLandContext(land);
+            const plant = context.sourceLand?.plant;
             const plantId = plant ? toNum(plant.id) : null;
+            const plantCfg = plantId ? getPlantById(plantId) : null;
+            const plantSize = Math.max(1, toNum(plantCfg?.size) || 1);
             const growSec = plant ? toNum(plant.grow_sec) : 0;
             const plantName = plant ? (plant.name || getPlantName(plantId) || '未知') : '';
             const landLabel = `土地#${toNum(land.id)}(${plantName})`;
@@ -128,20 +189,35 @@ function serializeLands(landsReply) {
                 id: toNum(land.id),
                 unlocked: land.unlocked,
                 level: toNum(land.level),
-                plant: plant ? {
-                    id: toNum(plant.id),
-                    name: plant.name || getPlantName(Number(plant.id)) || '未知',
-                    phase: phase,
-                    phaseName: phaseName,
-                    matureTime: matureTime,
-                    growSec: toNum(plant.grow_sec),
-                    dryNum: toNum(plant.dry_num),
-                    hasWeed: (plant.weed_owners?.length || 0) > 0,
-                    hasInsect: (plant.insect_owners?.length || 0) > 0,
-                    fruitNum: toNum(plant.fruit_num),
-                    stealable: plant.stealable,
-                    stolenNum: toNum(plant.stole_num)
-                } : null,
+                plantSize: context.occupiedByMaster ? 1 : plantSize,
+                occupiedByMaster: context.occupiedByMaster,
+                masterLandId: context.masterLandId,
+                occupiedLandIds: context.occupiedLandIds,
+                plant: plant ? (() => {
+                    const plantId = toNum(plant.id);
+                    const seedId = plantCfg?.seed_id || 0;
+                    return {
+                        id: plantId,
+                        name: plant.name || getPlantName(plantId) || '未知',
+                        image: getItemImageById(seedId),
+                        phase: phase,
+                        phaseName: phaseName,
+                        matureTime: matureTime,
+                        growSec: toNum(plant.grow_sec),
+                        dryNum: toNum(plant.dry_num),
+                        hasWeed: (plant.weed_owners?.length || 0) > 0,
+                        hasInsect: (plant.insect_owners?.length || 0) > 0,
+                        fruitNum: toNum(plant.fruit_num),
+                        stealable: plant.stealable,
+                        stolenNum: toNum(plant.stole_num),
+                        currentSeason: (() => {
+                            const total = Math.max(1, toNum(plantCfg?.seasons) || 1);
+                            const raw = toNum(plant.season);
+                            return raw > 0 ? Math.min(raw, total) : 1;
+                        })(),
+                        totalSeason: Math.max(1, toNum(plantCfg?.seasons) || 1)
+                    };
+                })() : null,
                 status: getLandStatus(land)
             };
         })

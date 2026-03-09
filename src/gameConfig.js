@@ -17,6 +17,8 @@ let seedToPlant = new Map();  // seed_id -> plant
 let fruitToPlant = new Map();  // fruit_id -> plant (果实ID -> 植物)
 let itemInfoConfig = null;
 let itemInfoMap = new Map(); // item_id -> item config
+let seedImageMap = new Map(); // seed_id -> image url
+let seedAssetImageMap = new Map(); // Crop_xxx -> image url
 
 /**
  * 加载配置文件
@@ -78,6 +80,41 @@ function loadConfigs() {
         }
     } catch (e) {
         console.warn('[配置] 加载 ItemInfo.json 失败:', e.message);
+    }
+    
+    // 加载种子图片映射
+    try {
+        const seedImageDir = path.join(__dirname, '..', 'ui', 'public', 'seed_images');
+        seedImageMap.clear();
+        seedAssetImageMap.clear();
+        if (fs.existsSync(seedImageDir)) {
+            const files = fs.readdirSync(seedImageDir);
+            for (const file of files) {
+                const filename = String(file || '');
+                const fileUrl = `/seed_images/${encodeURIComponent(filename)}`;
+                
+                // 1) id_..._Seed.png 命名，按 id 建立映射
+                const byId = filename.match(/^(\d+)_.*\.(?:png|jpg|jpeg|webp|gif)$/i);
+                if (byId) {
+                    const seedId = Number(byId[1]) || 0;
+                    if (seedId > 0 && !seedImageMap.has(seedId)) {
+                        seedImageMap.set(seedId, fileUrl);
+                    }
+                }
+                
+                // 2) ...Crop_xxx_Seed.png 命名，按 asset_name 建立映射
+                const byAsset = filename.match(/(Crop_\d+)_Seed\.(?:png|jpg|jpeg|webp|gif)$/i);
+                if (byAsset) {
+                    const assetName = byAsset[1];
+                    if (assetName && !seedAssetImageMap.has(assetName)) {
+                        seedAssetImageMap.set(assetName, fileUrl);
+                    }
+                }
+            }
+            console.log(`[配置] 已加载种子图片映射 (${seedImageMap.size} 项, ${seedAssetImageMap.size} 项)`);
+        }
+    } catch (e) {
+        console.warn('[配置] 加载 seed_images 失败:', e.message);
     }
 }
 
@@ -250,6 +287,44 @@ function getItemName(itemId) {
     return `未知物品`;
 }
 
+/**
+ * 根据物品ID获取图片URL
+ * @param {number} itemId - 物品ID
+ */
+function getItemImageById(itemId) {
+    const id = Number(itemId) || 0;
+    if (id <= 0) return '';
+    
+    // 内部函数：根据 ID 获取图片
+    const getImg = (targetId) => {
+        // 1. 优先按物品ID命中
+        const direct = seedImageMap.get(targetId);
+        if (direct) return direct;
+        
+        // 2. 其次按 ItemInfo.asset_name 命中（如 Crop_46_Seed.png）
+        const item = itemInfoMap.get(targetId);
+        const assetName = item && item.asset_name ? String(item.asset_name) : '';
+        if (assetName) {
+            const byAsset = seedAssetImageMap.get(assetName);
+            if (byAsset) return byAsset;
+        }
+        return '';
+    };
+    
+    // 1. 尝试直接获取
+    let img = getImg(id);
+    if (img) return img;
+    
+    // 2. 如果是果实，尝试获取对应的种子图片
+    const plant = getPlantByFruitId(id);
+    if (plant && plant.seed_id) {
+        img = getImg(plant.seed_id);
+        if (img) return img;
+    }
+    
+    return '';
+}
+
 // 启动时加载配置
 loadConfigs();
 
@@ -271,5 +346,7 @@ module.exports = {
     getFruitName,
     getPlantByFruitId,
     // 物品配置
-    getItemName
+    getItemName,
+    getItemInfoById,
+    getItemImageById
 };

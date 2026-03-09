@@ -8,6 +8,7 @@ const { CONFIG } = require('./config');
 const { types } = require('./proto');
 const { toLong, toNum, syncServerTime, log, logWarn } = require('./utils');
 const { updateStatusFromLogin, updateStatusGold, updateStatusLevel } = require('./status');
+const { getPlantById } = require('./gameConfig');
 const reporter = require('./reporter');
 const { initWasm, generateToken, encryptBuffer, decryptBuffer } = require('./utils/crypto-wasm');
 
@@ -211,7 +212,6 @@ function handleNotify(msg) {
                             if (!matureTime && land.plant && land.plant.grow_sec > 0) {
                                 matureTime = serverTime + toNum(land.plant.grow_sec);
                             }
-                            
                             return {
                                 id: toNum(land.id),
                                 unlocked: land.unlocked,
@@ -226,7 +226,17 @@ function handleNotify(msg) {
                                     hasInsect: (land.plant.insect_owners?.length || 0) > 0,
                                     fruitNum: toNum(land.plant.fruit_num),
                                     stealable: land.plant.stealable,
-                                    stolenNum: toNum(land.plant.stole_num)
+                                    stolenNum: toNum(land.plant.stole_num),
+                                    currentSeason: (() => {
+                                        const plantCfg = getPlantById(toNum(land.plant.id));
+                                        const total = Math.max(1, toNum(plantCfg?.seasons) || 1);
+                                        const raw = toNum(land.plant.season);
+                                        return raw > 0 ? Math.min(raw, total) : 1;
+                                    })(),
+                                    totalSeason: (() => {
+                                        const plantCfg = getPlantById(toNum(land.plant.id));
+                                        return Math.max(1, toNum(plantCfg?.seasons) || 1);
+                                    })()
                                 } : null
                             };
                         });

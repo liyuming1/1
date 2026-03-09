@@ -584,6 +584,7 @@ async function useFertilizerPacks() {
 }
 
 module.exports = {
+    getTaskInfo,
     checkAndClaimTasks,
     initTaskSystem,
     cleanupTaskSystem,
