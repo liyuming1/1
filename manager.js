@@ -18,6 +18,7 @@ const { v4: uuidv4 } = require('uuid');
 const WebSocket = require('ws');
 
 let getExpRanking, getPlantingRecommendation;
+
 try {
     const calcModule = require('./tools/calc-exp-yield');
     getExpRanking = calcModule.getExpRanking;
@@ -770,6 +771,59 @@ class AccountManager {
             }
         });
 
+        // 背包物品
+        this.app.get('/api/bag', async (req, res) => {
+            const accountId = req.query.accountId || req.headers['x-account-id'];
+            if (!accountId) {
+                return res.status(400).json({ ok: false, error: '缺少账号ID' });
+            }
+            
+            const acc = this.accounts.get(accountId);
+            if (!acc) {
+                return res.status(404).json({ ok: false, error: '账号不存在' });
+            }
+            
+            if (acc.state.status !== 'running' || !acc.process) {
+                return res.json({ ok: true, data: { items: [] } });
+            }
+            
+            try {
+                const result = await new Promise((resolve, reject) => {
+                    const callId = Date.now();
+                    
+                    const handleResponse = (msg) => {
+                        if (!msg || msg.type !== 'api_response' || msg.id !== callId) return;
+                        
+                        acc.process.removeListener('message', handleResponse);
+                        
+                        if (msg.error) {
+                            reject(new Error(msg.error));
+                        } else {
+                            resolve(msg.result);
+                        }
+                    };
+                    
+                    acc.process.on('message', handleResponse);
+                    
+                    acc.process.send({
+                        type: 'api_call',
+                        id: callId,
+                        method: 'getBagDetail',
+                        args: []
+                    });
+                    
+                    setTimeout(() => {
+                        acc.process.removeListener('message', handleResponse);
+                        reject(new Error('超时'));
+                    }, 10000);
+                });
+                
+                res.json({ ok: true, data: result });
+            } catch (e) {
+                res.status(500).json({ ok: false, error: e.message });
+            }
+        });
+
         // ============ 内部 API ============
 
         // 注册
@@ -985,9 +1039,11 @@ manager.start();
 // 优雅退出
 process.on('SIGINT', () => {
     console.log('\n[Manager] 正在关闭...');
-    for (const acc of manager.accounts.values()) {
-        if (acc.state.status === 'running') {
-            acc.stop();
+    if (manager) {
+        for (const acc of manager.accounts.values()) {
+            if (acc.state.status === 'running') {
+                acc.stop();
+            }
         }
     }
     process.exit(0);

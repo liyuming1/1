@@ -173,6 +173,53 @@ async function main() {
     initStatusBar();
     setStatusPlatform(CONFIG.platform);
 
+    // ============ IPC 消息处理 ============
+    // 注册可导出的函数（在connect之前定义，确保随时可以处理IPC消息）
+    const ipcHandlers = {
+        getBag: async () => {
+            const { getBag } = require('./src/warehouse');
+            return await getBag();
+        },
+        getBagDetail: async () => {
+            const { getBagDetail } = require('./src/warehouse');
+            return await getBagDetail();
+        },
+        getTaskInfo: async () => {
+            const { getTaskInfo } = require('./src/task');
+            return await getTaskInfo();
+        },
+        getAllLands: async () => {
+            const { getAllLands } = require('./src/farm');
+            return await getAllLands();
+        },
+        getFriendsList: async () => {
+            const { getAllFriends } = require('./src/friend');
+            return await getAllFriends();
+        }
+    };
+
+    // 监听 IPC 消息
+    if (process.send) {
+        process.on('message', async (msg) => {
+            if (!msg || msg.type !== 'api_call') return;
+            
+            const { id, method, args = [] } = msg;
+            
+            try {
+                if (ipcHandlers[method]) {
+                    const result = await ipcHandlers[method](...args);
+                    process.send({ type: 'api_response', id, result });
+                } else {
+                    process.send({ type: 'api_response', id, error: `未知方法: ${method}` });
+                }
+            } catch (e) {
+                console.error(`[IPC] 调用失败: ${method}`, e.message);
+                process.send({ type: 'api_response', id, error: e.message });
+            }
+        });
+        console.log('[IPC] 已启动消息监听');
+    }
+
     // 连接并登录，登录成功后启动各功能模块
     connect(options.code, async () => {
         // 子进程模式：注册到 Manager
