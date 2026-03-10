@@ -85,7 +85,7 @@ function getPlantPhaseNames(plantIdOrSeedId) {
 
 const CONFIG = {
     serverUrl: 'wss://gate-obt.nqf.qq.com/prod/ws',
-    clientVersion: '1.6.2.18_20260227',
+    clientVersion: '1.7.0.5_20260306',
     platform: 'qq',              // 平台: qq 或 wx (可通过 --wx 切换为微信)
     os: 'iOS',
     heartbeatInterval: 25000,    // 心跳间隔 25秒
@@ -117,7 +117,7 @@ const CONFIG = {
     notStealPlants: ['白萝卜','胡萝卜','大白菜','大蒜','大葱'],  // 不偷的植物
     selectedSeed: null,            // 种子选择：配置后只种这个种子，null则使用排行榜推荐
     device_info: {
-        client_version: "1.6.2.18_20260227",
+        client_version: "1.7.0.5_20260306",
         sys_software: 'iOS 26.2.1',
         network: 'wifi',
         memory: '7672',
