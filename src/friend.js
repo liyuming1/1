@@ -622,12 +622,12 @@ async function checkFriends() {
                 console.log(`[调试] 好友列表预览 [${name}]: steal=${stealNum} dry=${dryNum} weed=${weedNum} insect=${insectNum}`);
             }
 
-            if (hasSteal || hasHelp) {
-                // 有可偷的或需要帮助的，加入待访问列表
+            if (hasSteal) {
+                // 有可偷菜的，加入待访问列表
                 priorityFriends.push({ gid, name, level: toNum(f.level), hasSteal: true, hasHelp });
                 visitedGids.add(gid);
             }
-            // 不再访问无偷菜作物的好友（帮助好友在visitFriend中通过autoFriend开关控制）
+            // 只访问有可偷菜作物的好友（帮助好友在visitFriend中通过autoFriend开关控制）
 
             if (showDebug && visitedGids.has(gid)) {
                 console.log(`[调试] 好友 [${name}] 加入列表 (位置: ${priorityFriends.length})`);
