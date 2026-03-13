@@ -1,8 +1,263 @@
 // ============ 农场管理系统 - 前端逻辑 ============
 
-window.autoScrollLogs = true; // 日志自动滚动开关
-
+let currentTab = 'accounts';
 let selectedSeed = ''; // 当前选中的种子
+
+// 底部导航切换
+function initBottomNav() {
+    // 底部导航点击
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const tab = item.dataset.tab;
+            switchTab(tab);
+        });
+    });
+    
+    // 菜单按钮 - 打开侧边栏
+    const btnMenu = document.getElementById('btn-menu');
+    if (btnMenu) {
+        btnMenu.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openSidebar();
+        });
+    }
+    
+    // 关闭侧边栏按钮
+    const btnCloseSidebar = document.getElementById('btn-close-sidebar');
+    if (btnCloseSidebar) {
+        btnCloseSidebar.addEventListener('click', closeSidebar);
+    }
+    
+    // 侧边栏遮罩层点击关闭
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    if (sidebarOverlay) {
+        sidebarOverlay.addEventListener('click', closeSidebar);
+    }
+    
+    // 侧边栏添加账号按钮
+    const btnAddAccountSidebar = document.getElementById('btn-add-account-sidebar');
+    if (btnAddAccountSidebar) {
+        btnAddAccountSidebar.addEventListener('click', () => {
+            closeSidebar();
+            document.getElementById('scan-add-section').classList.add('hidden');
+            document.getElementById('form-add').classList.remove('hidden');
+            document.getElementById('form-add').reset();
+            modalAdd.classList.remove('hidden');
+        });
+    }
+    
+    // 侧边栏刷新按钮
+    const btnRefreshAll = document.getElementById('btn-refresh-all');
+    if (btnRefreshAll) {
+        btnRefreshAll.addEventListener('click', () => {
+            loadAccounts();
+            if (selectedAccountId) {
+                loadLands(selectedAccountId);
+                loadBag(selectedAccountId);
+                loadVisitors(selectedAccountId);
+                loadFriends(selectedAccountId);
+            }
+            showToast('已刷新', 'success');
+            closeSidebar();
+        });
+    }
+    
+    // 添加账号按钮
+    const btnAddHeader = document.getElementById('btn-add-account-header');
+    if (btnAddHeader) {
+        btnAddHeader.addEventListener('click', () => {
+            document.getElementById('scan-add-section').classList.add('hidden');
+            document.getElementById('form-add').classList.remove('hidden');
+            document.getElementById('form-add').reset();
+            modalAdd.classList.remove('hidden');
+            dropdown.classList.add('hidden');
+        });
+    }
+}
+
+function openSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    if (sidebar) sidebar.classList.remove('hidden');
+    if (overlay) overlay.classList.remove('hidden');
+    renderSidebarAccounts();
+}
+
+function closeSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    if (sidebar) sidebar.classList.add('hidden');
+    if (overlay) overlay.classList.add('hidden');
+}
+
+function renderSidebarAccounts() {
+    const list = document.getElementById('sidebar-accounts-list');
+    if (!list) return;
+    
+    if (!accounts || accounts.length === 0) {
+        list.innerHTML = '<div class="text-muted" style="text-align:center;padding:20px;">暂无账号</div>';
+        return;
+    }
+    
+    list.innerHTML = accounts.map(acc => {
+        const isSelected = acc.id === selectedAccountId;
+        const statusText = acc.status === 'running' ? '在线' : acc.status === 'stopped' ? '离线' : '错误';
+        const avatarUrl = acc.data?.avatarUrl || (acc.data?.openId ? `https://q1.qlogo.cn/g?b=qq&nk=${acc.data.openId}&s=100` : '');
+        
+        return `
+            <div class="sidebar-account-item ${isSelected ? 'selected' : ''}" data-id="${acc.id}">
+                ${avatarUrl 
+                    ? `<img class="sidebar-account-avatar" src="${avatarUrl}" alt="头像">` 
+                    : `<div class="sidebar-account-avatar-placeholder">?</div>`
+                }
+                <div class="sidebar-account-info">
+                    <div class="sidebar-account-name">${acc.name || acc.id}</div>
+                    <div class="sidebar-account-status">
+                        <span class="status-dot ${acc.status}"></span>
+                        <span>${statusText}</span>
+                    </div>
+                </div>
+                <div class="sidebar-account-actions">
+                    ${acc.status === 'running' 
+                        ? `<button class="btn-xs btn-danger" onclick="event.stopPropagation(); stopAccount('${acc.id}')">停止</button>`
+                        : `<button class="btn-xs btn-success" onclick="event.stopPropagation(); startAccount('${acc.id}')">启动</button>`
+                    }
+                    <button class="btn-xs btn-warning" onclick="event.stopPropagation(); reloginAccount('${acc.id}')">重登</button>
+                    <button class="btn-xs btn-danger" onclick="event.stopPropagation(); deleteAccount('${acc.id}')">删除</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // 点击账号项选中
+    list.querySelectorAll('.sidebar-account-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            if (e.target.classList.contains('btn-xs')) return;
+            const id = item.dataset.id;
+            selectAccount(id);
+            renderSidebarAccounts();
+        });
+    });
+}
+
+function switchTab(tabName) {
+    currentTab = tabName;
+    
+    // 更新导航状态
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.tab === tabName);
+    });
+    
+    // 更新内容显示
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.toggle('active', content.id === `tab-${tabName}`);
+    });
+    
+    // 根据tab加载对应数据
+    if (tabName === 'lands' || tabName === 'bag' || tabName === 'visitors' || tabName === 'friends' || tabName === 'home' || tabName === 'analytics') {
+        if (!selectedAccountId) {
+            showToast('请先选择账号', 'error');
+            return;
+        }
+        
+        if (tabName === 'home') renderHomeTab();
+        else if (tabName === 'lands') loadLands(selectedAccountId);
+        else if (tabName === 'bag') loadBag(selectedAccountId);
+        else if (tabName === 'visitors') loadVisitors(selectedAccountId);
+        else if (tabName === 'friends') loadFriends(selectedAccountId);
+        else if (tabName === 'analytics') {
+            // 设置策略等级为当前账号等级
+            const acc = accounts.find(a => a.id === selectedAccountId);
+            const levelInput = document.getElementById('strategy-level');
+            if (levelInput && acc?.data?.level) {
+                levelInput.value = acc.data.level;
+            }
+            loadAnalytics();
+        }
+    }
+}
+
+function renderHomeTab() {
+    const acc = accounts.find(a => a.id === selectedAccountId);
+    if (!acc) return;
+    
+    // 渲染账号信息卡片
+    const accountCard = document.getElementById('home-account-card');
+    if (accountCard) {
+        const avatarUrl = acc.data?.avatarUrl || (acc.data?.openId ? `https://q1.qlogo.cn/g?b=qq&nk=${acc.data.openId}&s=100` : '');
+        const statusText = acc.status === 'running' ? '在线' : acc.status === 'stopped' ? '离线' : '错误';
+        const statusClass = acc.status === 'running' ? 'online' : acc.status === 'error' ? 'error' : 'offline';
+        const runTime = acc.startTime && acc.status === 'running' ? getRunTime(acc.startTime) : '-';
+        const expProgress = acc.data?.expProgress;
+        const expDisplay = expProgress ? `${expProgress.current}/${expProgress.needed}` : (acc.data?.exp || '-');
+        
+        accountCard.innerHTML = `
+            <div class="home-account-header">
+                <div class="home-account-left">
+                    ${avatarUrl ? `<img class="home-avatar" src="${avatarUrl}" alt="头像">` : '<div class="home-avatar" style="background:#ddd;display:flex;align-items:center;justify-content:center;font-size:20px;">?</div>'}
+                    <div>
+                        <div class="home-account-name">${acc.name || acc.id}</div>
+                        <div class="home-account-platform">${acc.config?.platform === 'wx' ? '微信' : 'QQ'} <span class="status-dot ${statusClass}"></span>${statusText}</div>
+                    </div>
+                </div>
+                <div class="home-account-right">
+                    <span class="run-time">运行: ${runTime}</span>
+                </div>
+            </div>
+            <div class="home-account-info">
+                <div class="info-row"><span class="label">GID:</span><span class="value">${acc.data?.gid || '-'}</span></div>
+                <div class="info-row"><span class="label">等级:</span><span class="value">${acc.data?.level || '-'}</span></div>
+                <div class="info-row"><span class="label">经验:</span><span class="value">${expDisplay}</span></div>
+                <div class="info-row"><span class="label">金币:</span><span class="value">${acc.data?.gold || '-'}</span></div>
+                <div class="info-row"><span class="label">点券:</span><span class="value">${acc.data?.voucher || 0}</span></div>
+                <div class="info-row"><span class="label">金豆豆:</span><span class="value">${acc.data?.beans || 0}</span></div>
+            </div>
+        `;
+    }
+    
+    // 渲染统计
+    const homeStats = document.getElementById('home-stats');
+    if (homeStats) {
+        const stats = acc.stats || {};
+        homeStats.innerHTML = `
+            <div class="stats-grid">
+                <div class="stats-item"><span class="stats-icon">🎯</span><span class="stats-value">${stats.harvestCount || 0}</span><span class="stats-label">收获</span></div>
+                <div class="stats-item"><span class="stats-icon">🫳</span><span class="stats-value">${stats.stealCount || 0}</span><span class="stats-label">偷菜</span></div>
+                <div class="stats-item"><span class="stats-icon">💰</span><span class="stats-value">${stats.sellGold || 0}</span><span class="stats-label">售金</span></div>
+                <div class="stats-item"><span class="stats-icon">💧</span><span class="stats-value">${(stats.helpWater || 0) + (stats.selfWater || 0)}</span><span class="stats-label">浇水</span></div>
+                <div class="stats-item"><span class="stats-icon">🌿</span><span class="stats-value">${(stats.helpWeed || 0) + (stats.selfWeed || 0)}</span><span class="stats-label">除草</span></div>
+                <div class="stats-item"><span class="stats-icon">🐛</span><span class="stats-value">${(stats.helpPest || 0) + (stats.selfPest || 0)}</span><span class="stats-label">除虫</span></div>
+                <div class="stats-item"><span class="stats-icon">📈</span><span class="stats-value">${stats.expGained || 0}</span><span class="stats-label">获经验</span></div>
+            </div>
+        `;
+    }
+    
+    // 渲染日志
+    renderHomeLogs();
+}
+
+function renderHomeLogs() {
+    const logsDiv = document.getElementById('home-logs');
+    if (!logsDiv) return;
+    
+    const logs = accountLogs[selectedAccountId] || [];
+    
+    if (logs.length === 0) {
+        logsDiv.innerHTML = '<div class="log-entry" style="color:#666;">暂无日志</div>';
+        return;
+    }
+    
+    logsDiv.innerHTML = logs.map(log => {
+        const time = log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : '';
+        return `<div class="log-entry log-${log.level || 'info'}"><span class="log-time">[${time}]</span> ${log.message}</div>`;
+    }).join('');
+    
+    // 自动滚动到底部（仅当用户已在底部时）
+    const wasAtBottom = logsDiv.scrollHeight - logsDiv.scrollTop - logsDiv.clientHeight < 50;
+    if (wasAtBottom) {
+        logsDiv.scrollTop = logsDiv.scrollHeight;
+    }
+}
 
 const PHASE_NAMES = ['未知', '种子', '发芽', '小叶', '大叶', '开花', '成熟', '枯死'];
 
@@ -76,6 +331,16 @@ function getRunTime(startTime) {
     return hours + '时' + mins + '分' + secs + '秒';
 }
 
+function getRelativeTime(timestamp) {
+    if (!timestamp) return '-';
+    const seconds = Math.floor(Date.now() / 1000) - timestamp;
+    if (seconds < 60) return seconds + '秒前';
+    if (seconds < 3600) return Math.floor(seconds / 60) + '分钟前';
+    if (seconds < 86400) return Math.floor(seconds / 3600) + '小时前';
+    if (seconds < 604800) return Math.floor(seconds / 86400) + '天前';
+    return new Date(timestamp * 1000).toLocaleDateString();
+}
+
 let socket = null;
 let accounts = [];
 let selectedAccountId = null;
@@ -87,17 +352,18 @@ let landDetailTimer = null;
 let currentNotStealPlants = [];
 
 // ============ DOM 元素 ============
-const connectionStatus = document.getElementById('connection-status');
-const accountsGrid = document.getElementById('accounts-grid');
-const detailPanel = document.getElementById('detail-panel');
-const detailTitle = document.getElementById('detail-title');
-const detailStats = document.getElementById('detail-stats');
-const landsCount = document.getElementById('lands-count');
-const landsGrid = document.getElementById('lands-grid');
+let connectionStatus = document.getElementById('connection-status');
+let accountsGrid = document.getElementById('accounts-grid');
+let detailPanel = document.getElementById('detail-panel');
+let detailTitle = document.getElementById('detail-title');
+let detailStats = document.getElementById('detail-stats');
+let landsCount = document.getElementById('lands-count');
+let landsGrid = document.getElementById('lands-grid');
 const modalAdd = document.getElementById('modal-add');
 const modalEdit = document.getElementById('modal-edit');
 const toast = document.getElementById('toast');
 let landsDataCache = null;
+const landCells = {};  // 存储土地单元格的DOM引用
 let lastBagFetchAt = 0;
 const BAG_FETCH_INTERVAL = 2500;
 const MAX_LOGS_PER_ACCOUNT = 500;
@@ -127,30 +393,47 @@ function init() {
     connectWebSocket();
     setupEventListeners();
     loadAccounts();
+    initBottomNav();
     setInterval(updateCountdowns, 1000);
 }
 
 function updateCountdowns() {
-    if (!landsDataCache) return;
-    const now = Math.floor(Date.now() / 1000);
-    document.querySelectorAll('.land-cell.growing .land-timer').forEach(timer => {
-        const matureTime = parseInt(timer.dataset.matureTime);
-        if (matureTime) {
-            const remainingSec = matureTime - now;
-            if (remainingSec > 0) {
-                const hours = Math.floor(remainingSec / 3600);
-                const mins = Math.floor((remainingSec % 3600) / 60);
-                const secs = remainingSec % 60;
-                if (hours > 0) {
-                    timer.textContent = `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    // 更新土地成熟倒计时
+    if (landsDataCache) {
+        const now = Math.floor(Date.now() / 1000);
+        document.querySelectorAll('.land-cell.growing .land-timer').forEach(timer => {
+            const matureTime = parseInt(timer.dataset.matureTime);
+            if (matureTime) {
+                const remainingSec = matureTime - now;
+                if (remainingSec > 0) {
+                    const hours = Math.floor(remainingSec / 3600);
+                    const mins = Math.floor((remainingSec % 3600) / 60);
+                    const secs = remainingSec % 60;
+                    if (hours > 0) {
+                        timer.textContent = `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    } else {
+                        timer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+                    }
                 } else {
-                    timer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+                    timer.textContent = '';
                 }
-            } else {
-                timer.textContent = '';
+            }
+        });
+    }
+    
+    // 更新主页运行时间
+    if (currentTab === 'home') {
+        const homeCard = document.getElementById('home-account-card');
+        if (homeCard && selectedAccountId) {
+            const acc = accounts.find(a => a.id === selectedAccountId);
+            if (acc && acc.startTime && acc.status === 'running') {
+                const timeEl = homeCard.querySelector('.run-time');
+                if (timeEl) {
+                    timeEl.textContent = '运行: ' + getRunTime(acc.startTime);
+                }
             }
         }
-    });
+    }
 }
 
 function toggleSeedDropdown() {
@@ -196,29 +479,67 @@ function renderNotStealTags(plants) {
     });
 }
 
+function updateBagSeedGroupVisibility(strategy) {
+    const bagSeedGroup = document.getElementById('bag-seed-group');
+    if (bagSeedGroup) {
+        bagSeedGroup.style.display = (strategy === 'bag_priority') ? 'block' : 'none';
+    }
+    const preferredSeedGroup = document.getElementById('preferred-seed-group');
+    if (preferredSeedGroup) {
+        preferredSeedGroup.style.display = (strategy === 'preferred') ? 'block' : 'none';
+    }
+}
+
+let preferredSeedsCache = [];
+
+async function loadPreferredSeedOptions(accountId) {
+    const select = document.getElementById('preferredSeedId');
+    if (!select) return;
+    
+    // 如果已经有缓存且账号未变，直接使用
+    if (preferredSeedsCache.length > 0) {
+        renderPreferredSeedOptions(select);
+        return;
+    }
+    
+    try {
+        const res = await fetch(`/api/farm/seeds?accountId=${accountId}`);
+        const data = await res.json();
+        
+        if (data.success && data.data) {
+            preferredSeedsCache = data.data || [];
+            renderPreferredSeedOptions(select);
+        }
+    } catch (e) {
+        console.error('加载种子列表失败:', e);
+    }
+}
+
+function renderPreferredSeedOptions(select) {
+    if (!select) return;
+    
+    select.innerHTML = '<option value="0">自动选择</option>';
+    
+    preferredSeedsCache.forEach(seed => {
+        const levelLabel = seed.requiredLevel >= 200 ? '活动' : `${seed.requiredLevel}级`;
+        const option = document.createElement('option');
+        option.value = seed.seedId;
+        option.textContent = `${levelLabel} ${seed.name} (${seed.price}金)`;
+        select.appendChild(option);
+    });
+}
+
 async function loadRankingAndSeeds(acc) {
     const level = acc.data?.level || 1;
     const landsData = acc.lands;
     const lands = Array.isArray(landsData) ? landsData.filter(l => l.unlocked).length : (landsData?.lands ? landsData.lands.filter(l => l.unlocked).length : 18);
     
-    const rankingDisplay = document.getElementById('ranking-display');
-    const seedSelection = document.getElementById('seed-selection');
-    
     try {
-        const [rankingRes, seedsRes] = await Promise.all([
-            fetch(`/api/ranking/${level}/${lands}`),
-            fetch(`/api/seeds/${level}/${lands}`)
-        ]);
-        
-        const ranking = await rankingRes.json();
-        const seeds = await seedsRes.json();
-        
         // 加载不偷植物列表
         const notStealList = document.getElementById('notStealList');
         const notStealSummary = document.getElementById('notStealSummary');
         const notStealCount = document.getElementById('notStealCount');
         const notStealEdit = document.getElementById('notStealEdit');
-        const notStealDone = document.getElementById('notStealDone');
         currentNotStealPlants = acc.config?.notStealPlants || [];
         
         // 更新显示数量
@@ -254,65 +575,150 @@ async function loadRankingAndSeeds(acc) {
             console.error('加载植物列表失败:', e);
         }
         
-        if (ranking.topNormalFert && ranking.topNormalFert.length > 0) {
-            const recommendedSeed = ranking.topNormalFert[0];
-            let html = '<div class="ranking-columns">';
-            
-            html += '<div class="ranking-col"><strong>施肥推荐 ★</strong>';
-            ranking.topNormalFert.forEach((r, i) => {
-                const isFirst = i === 0;
-                const imgUrl = getPlantImageUrl(r.name);
-                const img = imgUrl ? `<img src="${imgUrl}" class="plant-icon-sm" alt="${r.name}">` : '🌱';
-                html += `<div class="ranking-row ${isFirst ? 'recommended' : ''}">
-                    <span class="ranking-rank">${i + 1}</span>
-                    <span class="ranking-name">${img} ${r.name}${isFirst ? ' ★' : ''}</span>
-                    <span class="ranking-exp">${r.expPerHour}/h</span>
-                    <span class="ranking-gain">+${r.gainPercent}%</span>
-                </div>`;
-            });
-            html += '</div>';
-            
-            html += '<div class="ranking-col"><strong>不施肥推荐</strong>';
-            ranking.topNoFert.forEach((r, i) => {
-                const imgUrl = getPlantImageUrl(r.name);
-                const img = imgUrl ? `<img src="${imgUrl}" class="plant-icon-sm" alt="${r.name}">` : '🌱';
-                html += `<div class="ranking-row">
-                    <span class="ranking-rank">${i + 1}</span>
-                    <span class="ranking-name">${img} ${r.name}</span>
-                    <span class="ranking-exp">${r.expPerHour}/h</span>
-                </div>`;
-            });
-            html += '</div>';
-            
-            html += '</div>';
-            rankingDisplay.innerHTML = html;
-        } else {
-            rankingDisplay.innerHTML = '<p class="text-muted">无法获取排行榜数据</p>';
+        // 加载背包种子优先级
+        await loadBagSeedPriority(acc);
+    } catch (e) {
+        console.error('加载配置数据失败:', e);
+    }
+}
+
+async function loadBagSeedPriority(acc) {
+    const bagSeedGroup = document.getElementById('bag-seed-group');
+    const bagSeedList = document.getElementById('bag-seed-list');
+    if (!bagSeedGroup || !bagSeedList) return;
+    
+    const strategy = acc.config?.plantingStrategy || 'preferred';
+    bagSeedGroup.style.display = (strategy === 'bag_priority') ? 'block' : 'none';
+    
+    if (strategy !== 'bag_priority') return;
+    
+    await renderBagSeedList(acc);
+}
+
+async function renderBagSeedList(acc) {
+    const bagSeedList = document.getElementById('bag-seed-list');
+    if (!bagSeedList) return;
+    
+    try {
+        const res = await fetch(`/api/bag/seeds?accountId=${acc.id}`);
+        const data = await res.json();
+        
+        const bagSeeds = data.data || [];
+        const priority = acc.config?.bagSeedPriority || [];
+        
+        // 账号未运行提示
+        if (bagSeeds.length === 0) {
+            bagSeedList.innerHTML = '<p style="color:#999;text-align:center;padding:10px;">请先启动账号加载背包数据</p>';
+            return;
         }
         
-        // 种子选择 - 使用 /api/seeds API 获取按等级过滤的种子列表
-        if (seeds.candidatesNormalFert && seeds.candidatesNormalFert.length > 0) {
-            const selectedSeed = acc.config?.selectedSeed || '';
-            
-            let html = '<select name="selectedSeed" id="seed-pool-select" class="seed-select">';
-            html += '<option value="">推荐种子</option>';
-            seeds.candidatesNormalFert.forEach(seed => {
-                const isRecommended = seed === seeds.candidatesNormalFert[0];
-                const expPerHour = typeof seed === 'object' ? seed.expPerHour : '';
-                html += `<option value="${typeof seed === 'object' ? seed.name : seed}" ${(typeof seed === 'object' ? seed.name : seed) === selectedSeed ? 'selected' : ''}>
-                    ${typeof seed === 'object' ? seed.name : seed} ${isRecommended ? '(推荐)' : ''} ${expPerHour ? '- ' + expPerHour + 'exp/h' : ''}
-                </option>`;
-            });
-            html += '</select>';
-            seedSelection.innerHTML = html;
-        } else {
-            seedSelection.innerHTML = '<p class="text-muted">无法获取种子数据</p>';
-        }
+        // 按优先级排序
+        const sortedSeeds = [...bagSeeds].sort((a, b) => {
+            const idxA = priority.indexOf(a.seedId);
+            const idxB = priority.indexOf(b.seedId);
+            if (idxA === -1 && idxB === -1) return b.requiredLevel - a.requiredLevel;
+            if (idxA === -1) return 1;
+            if (idxB === -1) return -1;
+            return idxA - idxB;
+        });
+        
+        bagSeedList.innerHTML = sortedSeeds.map((seed, idx) => {
+            const pIdx = priority.indexOf(seed.seedId);
+            const levelLabel = seed.requiredLevel >= 200 ? '活动' : `${seed.requiredLevel}级`;
+            const levelClass = seed.requiredLevel >= 200 ? 'activity' : '';
+            return `
+                <div class="bag-seed-item" data-seed-id="${seed.seedId}" draggable="true">
+                    <span class="bag-seed-priority">${pIdx >= 0 ? pIdx + 1 : '-'}</span>
+                    ${seed.image ? `<img class="bag-seed-icon" src="${seed.image}" alt="${seed.name}">` : '<span>🌱</span>'}
+                    <span class="bag-seed-name">${seed.name}</span>
+                    <span class="bag-seed-level ${levelClass}">${levelLabel}</span>
+                    <span class="bag-seed-count">x${seed.count}</span>
+                </div>
+            `;
+        }).join('');
+        
+        // 保存当前账号ID供刷新使用
+        window.currentBagSeedAccountId = acc.id;
+        window.currentBagSeedPriority = priority;
+        
+        // 添加拖拽排序
+        addDragSortToBagSeeds(bagSeedList);
+        
     } catch (e) {
-        console.error('加载排行榜和种子失败:', e);
-        rankingDisplay.innerHTML = '<p class="text-muted">加载失败</p>';
-        seedSelection.innerHTML = '<p class="text-muted">加载失败</p>';
+        console.error('加载背包种子失败:', e);
+        bagSeedList.innerHTML = '<p style="color:#999;text-align:center;padding:10px;">加载失败</p>';
     }
+}
+
+async function refreshBagSeeds() {
+    const accountId = window.currentBagSeedAccountId || selectedAccountId;
+    if (!accountId) return;
+    
+    const acc = accounts.find(a => a.id === accountId);
+    if (acc) {
+        await renderBagSeedList(acc);
+    }
+}
+
+function resetBagSeedPriority() {
+    const bagSeedList = document.getElementById('bag-seed-list');
+    if (!bagSeedList) return;
+    
+    window.currentBagSeedPriority = [];
+    
+    // 重新渲染列表（按等级排序）
+    const items = bagSeedList.querySelectorAll('.bag-seed-item');
+    items.forEach((item, idx) => {
+        item.querySelector('.bag-seed-priority').textContent = '-';
+    });
+}
+
+function addDragSortToBagSeeds(container) {
+    let draggedItem = null;
+    
+    container.querySelectorAll('.bag-seed-item').forEach(item => {
+        item.addEventListener('dragstart', e => {
+            draggedItem = item;
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        
+        item.addEventListener('dragover', e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+        
+        item.addEventListener('drop', e => {
+            e.preventDefault();
+            if (draggedItem && draggedItem !== item) {
+                const allItems = [...container.querySelectorAll('.bag-seed-item')];
+                const fromIdx = allItems.indexOf(draggedItem);
+                const toIdx = allItems.indexOf(item);
+                
+                if (fromIdx < toIdx) {
+                    item.after(draggedItem);
+                } else {
+                    item.before(draggedItem);
+                }
+                
+                // 更新优先级数字
+                updateBagSeedPriorityNumbers(container);
+            }
+        });
+    });
+}
+
+function updateBagSeedPriorityNumbers(container) {
+    container.querySelectorAll('.bag-seed-item').forEach((item, idx) => {
+        item.querySelector('.bag-seed-priority').textContent = idx + 1;
+    });
+}
+
+function getBagSeedPriorityFromUI() {
+    const container = document.getElementById('bag-seed-list');
+    if (!container) return [];
+    
+    const items = container.querySelectorAll('.bag-seed-item');
+    return Array.from(items).map(item => parseInt(item.dataset.seedId));
 }
 
 function connectWebSocket() {
@@ -345,7 +751,7 @@ function handleMessage(data) {
         switch (data.type) {
             case 'accounts_snapshot':
                 accounts = data.accounts || [];
-                renderAccounts();
+                if (currentTab === 'home') renderHomeTab();
                 break;
                 
             case 'account_status':
@@ -357,10 +763,7 @@ function handleMessage(data) {
                         accStatus.config = data.config;
                     }
                 }
-                renderAccounts();
-                if (selectedAccountId === data.accountId) {
-                    updateDetailPanel(data.accountId);
-                }
+                if (currentTab === 'home') renderHomeTab();
                 break;
             
             case 'account_data':
@@ -368,19 +771,13 @@ function handleMessage(data) {
                 if (accData) {
                     accData.data = data.data;
                 }
-                renderAccounts();
-                if (selectedAccountId === data.accountId) {
-                    updateDetailPanel(data.accountId);
-                }
+                if (currentTab === 'home') renderHomeTab();
                 break;
 
             case 'account_stats':
                 const accStats = accounts.find(a => a.id === data.accountId);
                 if (accStats) {
                     accStats.stats = data.stats;
-                }
-                if (selectedAccountId === data.accountId) {
-                    updateDetailPanel(data.accountId);
                 }
                 break;
             
@@ -432,6 +829,9 @@ function handleMessage(data) {
 }
 
 function updateConnectionStatus(connected) {
+    const connectionStatus = document.getElementById('connection-status');
+    if (!connectionStatus) return;
+    
     if (connected) {
         connectionStatus.textContent = '已连接';
         connectionStatus.className = 'status-connected';
@@ -445,185 +845,53 @@ async function loadAccounts() {
     try {
         const res = await fetch('/api/accounts');
         accounts = await res.json();
-        renderAccounts();
+        
+        // 没有选中账号时，自动选择第一个
+        if (!selectedAccountId && accounts.length > 0) {
+            selectAccount(accounts[0].id);
+        }
     } catch (e) {
         showToast('加载账号失败', 'error');
     }
 }
 
-setInterval(() => {
-    renderAccounts();
-}, 1000);
-
-function renderAccounts() {
-    accountsGrid.innerHTML = '';
-    
-    if (!accounts || accounts.length === 0) {
-        accountsGrid.innerHTML = `
-            <div class="empty-state" style="grid-column: 1 / -1;">
-                <h3>暂无账号</h3>
-                <p>点击"添加账号"开始使用</p>
-            </div>
-        `;
-        return;
-    }
-    
-    for (const acc of accounts) {
-        const card = document.createElement('div');
-        const selId = selectedAccountId || null;
-        card.className = `account-card ${acc.status} ${selId === acc.id ? 'selected' : ''}`;
-        card.dataset.id = acc.id;
-        
-        const statusText = acc.status === 'running' ? '在线' : acc.status === 'stopped' ? '离线' : '错误';
-        
-        const runTime = acc.startTime && acc.status === 'running' 
-            ? getRunTime(acc.startTime) 
-            : '-';
-        
-        const avatarUrl = acc.data?.avatarUrl || (acc.data?.openId ? `https://q1.qlogo.cn/g?b=qq&nk=${acc.data.openId}&s=100` : '');
-        
-        card.innerHTML = `
-            <div class="card-header">
-                ${avatarUrl ? `<img class="card-avatar" src="${avatarUrl}" alt="头像">` : ''}
-                <span class="card-name">${acc.name || acc.id}</span>
-                <div class="card-status">
-                    <span class="status-dot ${acc.status === 'running' ? 'online' : acc.status === 'error' ? 'error' : 'offline'}"></span>
-                    <span>${statusText}</span>
-                </div>
-            </div>
-            <div class="card-info">
-                <div>
-                    <span class="label">等级: </span>
-                    <span class="value">Lv${acc.data?.level || '-'}</span>
-                </div>
-                <div>
-                    <span class="label">金币: </span>
-                    <span class="value">${acc.data?.gold || '-'}</span>
-                </div>
-                <div>
-                    <span class="label">经验: </span>
-                    <span class="value">${acc.data?.expProgress ? acc.data.expProgress.current + '/' + acc.data.expProgress.needed : acc.data?.exp || '-'}</span>
-                </div>
-                <div>
-                    <span class="label">GID: </span>
-                    <span class="value">${acc.data?.gid || '-'}</span>
-                </div>
-                <div>
-                    <span class="label">运行: </span>
-                    <span class="value">${runTime}</span>
-                </div>
-                <div>
-                    <span class="label">平台: </span>
-                    <span class="value">${acc.config?.platform === 'wx' ? '微信' : 'QQ'}</span>
-                </div>
-            </div>
-            <div class="card-actions">
-                ${acc.status === 'running' 
-                    ? `<button class="btn btn-danger btn-stop" data-id="${acc.id}">停止</button>`
-                    : `<button class="btn btn-success btn-start" data-id="${acc.id}">启动</button>`
-                }
-                <button class="btn btn-warning btn-relogin" data-id="${acc.id}">重登</button>
-                <button class="btn btn-primary btn-config" data-id="${acc.id}">配置</button>
-                <button class="btn btn-danger btn-delete" data-id="${acc.id}">删除</button>
-            </div>
-        `;
-        
-        card.addEventListener('click', (e) => {
-            if (e.target.classList.contains('btn')) return;
-            selectAccount(acc.id);
-            updateDetailPanel(acc.id);
-        });
-        
-        accountsGrid.appendChild(card);
-    }
-    
-    document.querySelectorAll('.btn-start').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            startAccount(btn.dataset.id);
-        });
-    });
-    
-    document.querySelectorAll('.btn-stop').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            stopAccount(btn.dataset.id);
-        });
-    });
-    
-    document.querySelectorAll('.btn-detail').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            selectAccount(btn.dataset.id);
-        });
-    });
-    
-    document.querySelectorAll('.btn-delete').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (confirm('确定要删除这个账号吗？')) {
-                deleteAccount(btn.dataset.id);
-            }
-        });
-    });
-    
-    document.querySelectorAll('.btn-relogin').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openReloginModal(btn.dataset.id);
-        });
-    });
-    
-    document.querySelectorAll('.btn-config').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const acc = accounts.find(a => a.id === btn.dataset.id);
-            if (!acc) return;
-            
-            const form = document.getElementById('form-config');
-            form.accountId.value = acc.id;
-            form.farmInterval.value = acc.config?.farmInterval || 1;
-            form.friendInterval.value = acc.config?.friendInterval || 2;
-            form.harvestDelay.value = acc.config?.harvestDelay || 0;
-            form.stealDelay.value = acc.config?.stealDelay || 0;
-            form.autoFriend.checked = acc.config?.autoFriend || false;
-            form.autoSteal.checked = acc.config?.autoSteal || false;
-            form.autoClaim.checked = acc.config?.autoClaim || false;
-            form.autoFarm.checked = acc.config?.autoFarm || false;
-            form.autoFertilize.checked = acc.config?.autoFertilize || false;
-            form.autoFertilizeNormal.checked = acc.config?.autoFertilizeNormal || false;
-            form.autoFertilizeOrganic.checked = acc.config?.autoFertilizeOrganic || false;
-            form.autoLandUnlock.checked = acc.config?.autoLandUnlock || false;
-            form.autoLandUpgrade.checked = acc.config?.autoLandUpgrade || false;
-            form.autoSell.checked = acc.config?.autoSell || false;
-            form.autoBuyFertilizer.checked = acc.config?.autoBuyFertilizer || false;
-            if (form.autoBuyFertilizerNormal) form.autoBuyFertilizerNormal.checked = acc.config?.autoBuyFertilizerNormal || false;
-            if (form.autoBuyFertilizerOrganic) form.autoBuyFertilizerOrganic.checked = acc.config?.autoBuyFertilizerOrganic || false;
-            form.autoUseFertilizer.checked = acc.config?.autoUseFertilizer || false;
-            
-            document.getElementById('modal-config').classList.remove('hidden');
-            
-            loadRankingAndSeeds(acc);
-        });
-    });
-}
-
 function selectAccount(id) {
     selectedAccountId = id;
-    renderAccounts();
+    // 清空种子缓存，切换账号时重新加载
+    preferredSeedsCache = [];
     updateDetailPanel(id);
-    detailPanel.classList.remove('hidden');
+    // 加载当前Tab数据
+    if (currentTab === 'lands') loadLands(id);
+    else if (currentTab === 'bag') loadBag(id);
+    else if (currentTab === 'visitors') loadVisitors(id);
+    else if (currentTab === 'friends') loadFriends(id);
 }
 
 function updateDetailPanel(id) {
     const acc = accounts.find(a => a.id === id);
     if (!acc) return;
     
+    selectedAccountId = id;
+    
+    // 清空土地单元格缓存，切换账号时重新创建
+    for (const key in landCells) {
+        delete landCells[key];
+    }
+    const landsGrid = document.getElementById('lands-grid');
+    if (landsGrid) landsGrid.innerHTML = '';
+    
     renderAccountLogs(id);
     
-    detailTitle.textContent = acc.name || id;
+    // 切换到当前Tab后刷新数据（只对运行中的账号）
+    if (acc.status === 'running') {
+        lastBagFetchAt = 0;
+        loadBag(id);
+        loadVisitors(id);
+        loadFriends(id);
+    }
     
-    // 渲染统计
+    // 更新统计显示
+    const detailStats = document.getElementById('detail-stats');
     if (detailStats) {
         const stats = acc.stats || {};
         detailStats.innerHTML = `
@@ -640,13 +908,25 @@ function updateDetailPanel(id) {
     
     if (acc.lands) {
         renderLands(acc.lands);
-    } else {
+    } else if (landsGrid) {
         landsGrid.innerHTML = '<p style="color:#999;grid-column:1/-1;text-align:center;">暂无土地数据</p>';
     }
+}
+
+async function loadLands(accountId) {
+    const targetId = accountId || selectedAccountId;
+    if (!targetId) return;
     
-    loadBag(id);
-    
-    detailPanel.classList.remove('hidden');
+    try {
+        const res = await fetch(`/api/accounts/${targetId}/lands`);
+        const data = await res.json();
+        
+        if (data.success && data.data) {
+            renderLands(data.data);
+        }
+    } catch (e) {
+        console.error('加载土地失败:', e);
+    }
 }
 
 async function loadBag(accountId) {
@@ -689,31 +969,31 @@ async function loadBag(accountId) {
             const cell = document.createElement('div');
             cell.className = 'bag-item';
             
-            let iconHtml = '📦';
+            // 使用首字符作为备用图标
+            const firstChar = (item.name || '物').charAt(0);
+            let iconHtml = '';
             
             // 使用后端返回的image字段
             if (item.image) {
-                iconHtml = `<img src="${item.image}" class="plant-icon-img" alt="${item.name}" onerror="this.parentElement.innerHTML='📦'">`;
-            } else if (item.category === 'fruit') {
-                iconHtml = '🍎';
-            } else if (item.category === 'seed') {
-                iconHtml = '🌱';
-            } else if (item.category === 'gold') {
-                iconHtml = '💰';
-            } else if (item.category === 'voucher') {
-                iconHtml = '🎫';
+                iconHtml = `<img src="${item.image}" class="bag-item-img" alt="${item.name}" onerror="this.style.display='none';this.parentElement.querySelector('.bag-item-fallback').style.display='flex'">
+                    <div class="bag-item-fallback">${firstChar}</div>`;
+            } else {
+                iconHtml = `<div class="bag-item-fallback" style="display:flex">${firstChar}</div>`;
             }
             
             cell.innerHTML = `
-                <div class="bag-item-icon">${iconHtml}</div>
                 <div class="bag-item-id">#${item.id}</div>
-                <div class="bag-item-name" title="${item.name}">${item.name}</div>
+                <div class="bag-item-icon">${iconHtml}</div>
+                <div class="bag-item-name" title="${item.name || `物品${item.id}`}">${item.name || `物品${item.id}`}</div>
                 <div class="bag-item-info">
-                    ${item.uid > 0 ? 'UID:' + item.uid : ''} 类型:${item.itemType || 0}
-                    ${item.level > 0 ? ' Lv' + item.level : ''}
-                    ${item.price > 0 ? ' ' + item.price + '金' : ''}
+                    ${item.uid > 0 ? 'UID:' + item.uid : ''}
+                    ${item.level > 0 ? 'Lv' + item.level : ''}
+                    <span class="item-type">类型:${item.itemType || 0}</span>
                 </div>
-                <div class="bag-item-count">${item.hoursText || 'x' + item.count}</div>
+                <div class="bag-item-info2">
+                    ${item.price > 0 ? `<span class="item-price ${item.priceId === 1005 ? 'beans' : item.priceId === 1002 ? 'voucher' : ''}">${item.price}${item.priceUnit || '金'}</span>` : ''}
+                    <span class="bag-item-count">${item.hoursText || 'x' + item.count}</span>
+                </div>
             `;
             bagGrid.appendChild(cell);
         }
@@ -722,83 +1002,675 @@ async function loadBag(accountId) {
     }
 }
 
+async function loadAnalytics() {
+    const listEl = document.getElementById('analytics-list');
+    if (!listEl) return;
+    
+    const sort = document.getElementById('analytics-sort')?.value || 'exp';
+    const strategyLevel = document.getElementById('strategy-level')?.value || 1;
+    
+    listEl.innerHTML = '<p style="color:#999;text-align:center;">加载中...</p>';
+    
+    try {
+        const res = await fetch(`/api/analytics?sort=${sort}`);
+        const data = await res.json();
+        
+        if (!data.ok || !data.data || data.data.length === 0) {
+            listEl.innerHTML = '<p style="color:#999;text-align:center;">暂无数据</p>';
+            return;
+        }
+        
+        const allData = data.data;
+        
+        // 计算策略推荐
+        const level = parseInt(strategyLevel) || 1;
+        const filteredByLevel = allData.filter(item => !item.level || item.level <= level);
+        const availableCount = filteredByLevel.length;
+        
+        // 更新策略卡片
+        updateStrategyCard('exp', 'expPerHour', filteredByLevel, level);
+        updateStrategyCard('profit', 'profitPerHour', filteredByLevel, level);
+        updateStrategyCard('fert-exp', 'normalFertilizerExpPerHour', filteredByLevel, level);
+        updateStrategyCard('fert-profit', 'normalFertilizerProfitPerHour', filteredByLevel, level);
+        
+        // 更新提示
+        const tipEl = document.getElementById('strategy-tip');
+        if (tipEl) {
+            tipEl.textContent = `可种植 ${availableCount}/${allData.length} 种作物`;
+        }
+        
+        // 渲染列表
+        listEl.innerHTML = `
+            <table class="analytics-table">
+                <thead>
+                    <tr>
+                        <th>作物</th>
+                        <th>等级</th>
+                        <th>生长时间</th>
+                        <th>经验/时</th>
+                        <th>利润/时</th>
+                        <th>普肥经验/时</th>
+                        <th>普肥利润/时</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${allData.map((item, idx) => `
+                        <tr>
+                            <td>
+                                <div class="analytics-plant-name">
+                                    <span class="plant-icon">${item.image ? `<img src="${item.image}" alt="${item.name}">` : '🌱'}</span>
+                                    <span>${item.name}</span>
+                                </div>
+                            </td>
+                            <td>Lv${item.level || '-'}</td>
+                            <td>${item.growTimeStr || '-'}</td>
+                            <td class="exp">${item.expPerHour || '-'}</td>
+                            <td class="profit">${item.profitPerHour || '-'}</td>
+                            <td class="fert-exp">${item.normalFertilizerExpPerHour || '-'}</td>
+                            <td class="fert-profit">${item.normalFertilizerProfitPerHour || '-'}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    } catch (e) {
+        listEl.innerHTML = '<p style="color:#999;text-align:center;">加载失败</p>';
+    }
+}
+
+function updateStrategyCard(elementId, metric, data, level) {
+    const el = document.getElementById(`strategy-${elementId}`);
+    if (!el) return;
+    
+    if (data.length === 0) {
+        el.innerHTML = '<div class="strategy-empty">暂无可种植作物</div>';
+        return;
+    }
+    
+    // 找出该指标最高的作物
+    const sorted = [...data].sort((a, b) => {
+        const av = Number(a[metric]) || 0;
+        const bv = Number(b[metric]) || 0;
+        return bv - av;
+    });
+    const best = sorted[0];
+    
+    if (!best || !best[metric]) {
+        el.innerHTML = '<div class="strategy-empty">暂无数据</div>';
+        return;
+    }
+    
+    const unit = metric.includes('profit') ? '金币' : 'EXP';
+    el.innerHTML = `
+        <div class="strategy-plant-info">
+            <div class="strategy-plant-icon">${best.image ? `<img src="${best.image}" alt="${best.name}">` : '🌱'}</div>
+            <div class="strategy-plant-name">${best.name}</div>
+            <div class="strategy-plant-level">Lv${best.level || '-'}</div>
+        </div>
+        <div class="strategy-plant-value">
+            <span class="value-label">${unit}/时</span>
+            <span class="value-num">${best[metric]}</span>
+        </div>
+    `;
+}
+
+async function loadVisitors(accountId) {
+    const visitorsList = document.getElementById('visitors-list');
+    if (!visitorsList) return;
+     
+    const targetId = accountId || selectedAccountId;
+    if (!targetId) {
+        visitorsList.innerHTML = '<p style="color:#999;text-align:center;">请选择一个账号</p>';
+        return;
+    }
+    
+    try {
+        const res = await fetch(`/api/interact-records?accountId=${targetId}`);
+        const data = await res.json();
+        
+        if (!data.success || !data.data || data.data.length === 0) {
+            visitorsList.innerHTML = '<p style="color:#999;text-align:center;">暂无访客记录</p>';
+            return;
+        }
+        
+        window.visitorsCache = data.data;
+        
+        renderVisitorsList(window.visitorsCache);
+    } catch (e) {
+        visitorsList.innerHTML = '<p style="color:#999;text-align:center;">加载失败</p>';
+    }
+}
+
+function renderVisitorsList(records) {
+    const visitorsList = document.getElementById('visitors-list');
+    if (!visitorsList) return;
+    
+    let filtered = records;
+    const activeFilter = document.querySelector('.filter-btn.active');
+    const filterType = activeFilter ? activeFilter.dataset.filter : 'all';
+    
+    if (filterType !== 'all') {
+        filtered = records.filter(r => String(r.actionType) === filterType);
+    }
+    
+    if (filtered.length === 0) {
+        visitorsList.innerHTML = '<p style="color:#999;text-align:center;">暂无访客记录</p>';
+        return;
+    }
+    
+    const fromTypeMap = { 1: '应用', 2: '空间', 3: 'QQ游戏' };
+    
+    visitorsList.innerHTML = filtered.slice(0, 100).map(r => {
+        const actionClass = r.actionType === 1 ? 'steal' : r.actionType === 2 ? 'help' : r.actionType === 3 ? 'bad' : '';
+        const time = r.serverTimeSec ? new Date(r.serverTimeSec * 1000).toLocaleString() : '-';
+        const avatar = r.avatarUrl || (r.visitorGid ? `https://q1.qlogo.cn/g?b=qq&nk=${r.visitorGid}&s=100` : '');
+        
+        let actionText = r.actionLabel || '互动';
+        if (r.cropCount > 0) {
+            actionText += ` ${r.cropName || '作物'}x${r.cropCount}`;
+        } else if (r.times > 1) {
+            actionText += ` (${r.times}次)`;
+        }
+        if (r.landId > 0) actionText += ` 地块${r.landId}`;
+        
+        const fromTypeText = r.fromType ? fromTypeMap[r.fromType] || `来源${r.fromType}` : '';
+        
+        return `
+            <div class="visitor-item">
+                ${avatar ? `<img class="visitor-avatar" src="${avatar}" alt="头像" onerror="this.style.display='none'">` : '<div class="visitor-avatar"></div>'}
+                <div class="visitor-info">
+                    <div class="visitor-header">
+                        <span class="visitor-name">${r.nick || `GID:${r.visitorGid}`}</span>
+                        ${r.level ? `<span class="visitor-level">Lv.${r.level}</span>` : ''}
+                        <span class="visitor-gid">${r.visitorGid}</span>
+                    </div>
+                    <div class="visitor-action-row">
+                        <span class="visitor-action ${actionClass}">${actionText}</span>
+                        ${fromTypeText ? `<span class="visitor-from">来自:${fromTypeText}</span>` : ''}
+                    </div>
+                    <div class="visitor-time-row">
+                        <span class="visitor-time">${time}</span>
+                        <button class="visitor-block-btn" onclick="addToBlacklist('${r.visitorGid}')">拉黑</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function filterVisitors(filterType) {
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === filterType);
+    });
+    
+    if (window.visitorsCache) {
+        renderVisitorsList(window.visitorsCache);
+    }
+}
+
+async function loadFriends(accountId) {
+    const friendsList = document.getElementById('friends-list');
+    if (!friendsList) return;
+    
+    const targetId = accountId || selectedAccountId;
+    if (!targetId) {
+        friendsList.innerHTML = '<p style="color:#999;text-align:center;">请选择一个账号</p>';
+        return;
+    }
+    
+    try {
+        const res = await fetch(`/api/friends?accountId=${targetId}`);
+        const data = await res.json();
+        
+        if (!data.success || !data.data || data.data.length === 0) {
+            friendsList.innerHTML = '<p style="color:#999;text-align:center;">暂无好友</p>';
+            return;
+        }
+        
+        window.friendsCache = data.data;
+        
+        const blacklistRes = await fetch(`/api/blacklist?accountId=${targetId}`);
+        const blacklistData = await blacklistRes.json();
+        window.blacklistCache = blacklistData.data || [];
+        
+        renderFriendsList(window.friendsCache, window.blacklistCache);
+    } catch (e) {
+        friendsList.innerHTML = '<p style="color:#999;text-align:center;">加载失败</p>';
+    }
+}
+
+let currentFriendFilter = 'all';
+let expandedFriendGid = null;
+
+function renderFriendsList(friends, blacklist = []) {
+    const friendsList = document.getElementById('friends-list');
+    if (!friendsList) return;
+    
+    const blacklistGids = new Set(blacklist.map(b => String(b.gid)));
+    
+    let filtered = friends;
+    let filteredBlacklist = [];
+    const searchInput = document.getElementById('friend-search');
+    const keyword = searchInput ? searchInput.value.trim().toLowerCase() : '';
+    
+    if (currentFriendFilter === 'blacklist') {
+        filtered = [];
+        filteredBlacklist = blacklist.filter(f => 
+            !keyword || 
+            (f.nick && f.nick.toLowerCase().includes(keyword)) || 
+            String(f.gid).includes(keyword)
+        );
+    } else if (keyword) {
+        filtered = friends.filter(f => 
+            (f.name && f.name.toLowerCase().includes(keyword)) || 
+            String(f.gid).includes(keyword)
+        );
+        filteredBlacklist = [];
+    } else {
+        filtered = friends.filter(f => !blacklistGids.has(String(f.gid)));
+        filteredBlacklist = blacklist;
+    }
+    
+    let html = '';
+    
+    html += `<div class="friend-filter-bar">
+        <button class="friend-filter-btn ${currentFriendFilter === 'all' ? 'active' : ''}" onclick="switchFriendFilter('all')">好友列表 (${friends.length - blacklist.length})</button>
+        <button class="friend-filter-btn ${currentFriendFilter === 'blacklist' ? 'active' : ''}" onclick="switchFriendFilter('blacklist')">黑名单 (${blacklist.length})</button>
+    </div>`;
+    
+    if (currentFriendFilter === 'all' && filtered.length === 0) {
+        html += '<p style="color:#999;text-align:center;">暂无好友</p>';
+    } else if (currentFriendFilter === 'blacklist' && filteredBlacklist.length === 0) {
+        html += '<p style="color:#999;text-align:center;">黑名单为空</p>';
+    } else if (currentFriendFilter === 'all') {
+        // 按等级降序排序
+        filtered.sort((a, b) => (b.level || 0) - (a.level || 0));
+        html += filtered.slice(0, 100).map(f => {
+            const avatar = f.avatarUrl || (f.gid ? `https://q1.qlogo.cn/g?b=qq&nk=${f.gid}&s=100` : '');
+            let statusHtml = '';
+            if (f.plant) {
+                const parts = [];
+                if (f.plant.stealNum > 0) {
+                    const plantName = f.plant.stealPlantName ? `(${f.plant.stealPlantName})` : '';
+                    parts.push(`<span class="steal">可偷${f.plant.stealNum}${plantName}</span>`);
+                }
+                if (f.plant.dryNum > 0) parts.push(`<span class="help">缺水${f.plant.dryNum}</span>`);
+                if (f.plant.weedNum > 0) parts.push(`<span class="help">有草${f.plant.weedNum}</span>`);
+                if (f.plant.insectNum > 0) parts.push(`<span class="help">有虫${f.plant.insectNum}</span>`);
+                statusHtml = parts.length > 0 ? parts.join(' ') : '<span class="empty">无操作</span>';
+            } else {
+                statusHtml = '<span class="empty">无数据</span>';
+            }
+            
+            return `
+                <div class="friend-item" onclick="openFriendLandModal('${f.gid}')">
+                    ${avatar ? `<img class="friend-avatar" src="${avatar}" alt="头像" onerror="this.style.display='none'">` : '<div class="friend-avatar"></div>'}
+                    <div class="friend-info">
+                        <div class="friend-header">
+                            <span class="friend-name">${f.name}</span>
+                            ${f.level ? `<span class="friend-level">Lv.${f.level}</span>` : ''}
+                            <span class="friend-gid">${f.gid}</span>
+                        </div>
+                        <div class="friend-status">${statusHtml}</div>
+                        <div class="friend-actions">
+                            <button class="friend-action-btn steal" onclick="event.stopPropagation(); operateFriend('${f.gid}', 'steal')">偷取</button>
+                            <button class="friend-action-btn water" onclick="event.stopPropagation(); operateFriend('${f.gid}', 'water')">浇水</button>
+                            <button class="friend-action-btn weed" onclick="event.stopPropagation(); operateFriend('${f.gid}', 'weed')">除草</button>
+                            <button class="friend-action-btn bug" onclick="event.stopPropagation(); operateFriend('${f.gid}', 'bug')">除虫</button>
+                            <button class="friend-action-btn bad" onclick="event.stopPropagation(); operateFriend('${f.gid}', 'bad')">捣乱</button>
+                            <button class="friend-action-btn blacklist" onclick="event.stopPropagation(); addToBlacklist('${f.gid}')">拉黑</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } else if (currentFriendFilter === 'blacklist') {
+        html += filteredBlacklist.slice(0, 100).map(f => {
+            return `
+                <div class="friend-item blacklist-item">
+                    <div class="friend-avatar"></div>
+                    <div class="friend-info">
+                        <div class="friend-name">${f.nick || 'GID:' + f.gid}</div>
+                        <div class="friend-status"><span class="empty">黑名单</span></div>
+                        <div class="friend-actions">
+                            <button class="friend-action-btn remove-blacklist" onclick="removeFromBlacklist('${f.gid}')">移出黑名单</button>
+                        </div>
+                    </div>
+                    <div class="friend-gid">${f.gid}</div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    friendsList.innerHTML = html;
+}
+
+function switchFriendFilter(filter) {
+    currentFriendFilter = filter;
+    renderFriendsList(window.friendsCache, window.blacklistCache);
+}
+
+async function addToBlacklist(gid) {
+    if (!selectedAccountId) return;
+    
+    try {
+        const res = await fetch('/api/blacklist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accountId: selectedAccountId, gid: gid })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('已加入黑名单', 'success');
+            loadFriends(selectedAccountId);
+        } else {
+            showToast(data.message || '操作失败', 'error');
+        }
+    } catch (e) {
+        showToast('操作失败: ' + e.message, 'error');
+    }
+}
+
+async function removeFromBlacklist(gid) {
+    if (!selectedAccountId) return;
+    
+    try {
+        const res = await fetch(`/api/blacklist/${gid}?accountId=${selectedAccountId}`, {
+            method: 'DELETE'
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('已从黑名单移除', 'success');
+            loadFriends(selectedAccountId);
+        } else {
+            showToast(data.message || '操作失败', 'error');
+        }
+    } catch (e) {
+        showToast('操作失败: ' + e.message, 'error');
+    }
+}
+
+async function openFriendLandModal(gid) {
+    const modal = document.getElementById('friend-land-modal');
+    const landsContainer = document.getElementById('modal-friend-lands');
+    const nameEl = document.getElementById('modal-friend-name');
+    
+    const friend = window.friendsCache?.find(f => String(f.gid) === String(gid));
+    nameEl.textContent = friend?.name ? `${friend.name} 的土地` : '好友土地';
+    
+    modal.style.display = 'flex';
+    landsContainer.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">加载中...</p>';
+    
+    modal.onclick = function(e) {
+        if (e.target === modal) {
+            closeFriendLandModal();
+        }
+    };
+    
+    try {
+        const res = await fetch(`/api/friend/${gid}/lands?accountId=${selectedAccountId}`);
+        const data = await res.json();
+        
+        if (!data.success || !data.data) {
+            landsContainer.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">无土地数据</p>';
+            return;
+        }
+        
+        const lands = data.data.lands || [];
+        
+        // 生成土地单元格，和土地标签页一样的逻辑
+        let cellsHtml = '';
+        for (let i = 1; i <= 24; i++) {
+            const l = lands.find(item => item && item.id === i);
+            let cellClass = 'land-cell';
+            if (!l || !l.unlocked) {
+                cellClass += ' locked';
+            } else if (!l.plant) {
+                cellClass += ' empty';
+            } else {
+                cellClass += ` ${l.status || 'growing'}`;
+            }
+            const landData = {
+                id: l?.id || i,
+                unlocked: l?.unlocked,
+                level: l?.level || 1,
+                plant: l?.plant || null,
+                status: l?.status || 'growing'
+            };
+            cellsHtml += `<div class="${cellClass}" data-land-id="${i}">${generateLandCellHtml(landData)}</div>`;
+        }
+        
+        landsContainer.innerHTML = `<div class="friend-lands-grid">${cellsHtml}</div>`;
+    } catch (e) {
+        landsContainer.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">加载失败</p>';
+    }
+}
+
+function closeFriendLandModal() {
+    const modal = document.getElementById('friend-land-modal');
+    modal.style.display = 'none';
+}
+
+async function toggleFriendLands(gid) {
+    console.log('[好友] 展开土地, gid:', gid, 'selectedAccountId:', selectedAccountId);
+    
+    // 如果点击的是同一个好友，则收起
+    if (expandedFriendGid === gid) {
+        expandedFriendGid = null;
+        renderFriendsList(window.friendsCache, window.blacklistCache);
+        return;
+    }
+    
+    expandedFriendGid = gid;
+    
+    // 重新渲染好友列表以显示展开状态
+    renderFriendsList(window.friendsCache, window.blacklistCache);
+    
+    // 异步加载土地数据
+    const landsContainer = document.getElementById(`friend-lands-${gid}`);
+    if (!landsContainer) {
+        console.log('[好友] landsContainer not found, gid:', gid);
+        return;
+    }
+    
+    landsContainer.innerHTML = '<p style="text-align:center;color:#999;padding:10px;">加载中...</p>';
+    
+    try {
+        console.log('[好友] 请求土地数据, url:', `/api/friend/${gid}/lands?accountId=${selectedAccountId}`);
+        const res = await fetch(`/api/friend/${gid}/lands?accountId=${selectedAccountId}`);
+        const data = await res.json();
+        console.log('[好友] 土地数据返回:', data);
+        
+        if (!data.success || !data.data) {
+            landsContainer.innerHTML = `<p style="color:red;padding:10px;">错误: ${data.message || '获取失败'}</p>`;
+            return;
+        }
+        
+        const lands = data.data.lands || [];
+        
+        // 生成土地单元格
+        let cellsHtml = '';
+        for (let i = 1; i <= 24; i++) {
+            const l = lands.find(item => item && item.id === i);
+            let cellClass = 'land-cell';
+            if (!l || !l.unlocked) {
+                cellClass += ' locked';
+            } else if (!l.plant) {
+                cellClass += ' empty';
+            } else {
+                cellClass += ` ${l.status || 'growing'}`;
+            }
+            const landData = {
+                id: l?.id || i,
+                unlocked: l?.unlocked,
+                level: l?.level || 1,
+                plant: l?.plant || null,
+                status: l?.status || 'growing'
+            };
+            cellsHtml += `<div class="${cellClass}" data-land-id="${i}">${generateLandCellHtml(landData)}</div>`;
+        }
+        
+        landsContainer.innerHTML = `<div class="friend-lands-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:10px;">${cellsHtml}</div>`;
+    } catch (e) {
+        landsContainer.innerHTML = `<p style="color:red;padding:10px;">加载失败: ${e.message}</p>`;
+    }
+}
+
+async function operateFriend(gid, opType) {
+    if (!selectedAccountId) {
+        showToast('请先选择账号', 'error');
+        return;
+    }
+    
+    const opNames = { steal: '偷取', water: '浇水', weed: '除草', bug: '除虫', bad: '捣乱' };
+    
+    try {
+        const res = await fetch(`/api/friend/${gid}/op?accountId=${selectedAccountId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ op: opType })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            const count = data.data?.count || 0;
+            const message = data.data?.message || data.data?.results?.[0]?.error || '操作成功';
+            showToast(`${opNames[opType]}: ${message}`, count > 0 ? 'success' : 'info');
+            loadFriends(selectedAccountId);
+        } else {
+            showToast(data.message || '操作失败', 'error');
+        }
+    } catch (e) {
+        showToast('操作失败: ' + e.message, 'error');
+    }
+}
+
+function searchFriends(keyword) {
+    if (window.friendsCache) {
+        renderFriendsList(window.friendsCache, window.blacklistCache);
+    }
+}
+
+function generateLandCellHtml(land) {
+    if (!land) {
+        return `<span class="land-icon">⬛</span><span class="land-name">错误</span>`;
+    }
+    
+    if (!land.unlocked) {
+        return `<span class="land-icon">⬛</span><span class="land-name">锁定</span><span class="land-level">Lv${land.level || 1}</span>`;
+    }
+    
+    if (!land.plant) {
+        return `<span class="land-icon">⬜</span><span class="land-name">空地</span><span class="land-level">Lv${land.level}</span>`;
+    }
+    
+    const status = land.status || 'growing';
+    const name = land.plant?.name || '未知';
+    const image = land.plant?.image;
+    const icon = getLandIcon(status, name, image);
+    const matureTime = land.plant?.matureTime;
+    
+    let html = `
+        <span class="land-icon">${icon}</span>
+        <div class="land-info">
+            <span class="land-name">${name}</span>
+    `;
+    
+    // 显示季数
+    if (land.plant.totalSeason > 1) {
+        html += `<span class="land-season">${land.plant.currentSeason}/${land.plant.totalSeason}</span>`;
+    }
+    
+    html += `</div>`;
+    
+    // 显示成熟倒计时
+    if (matureTime && status === 'growing') {
+        const remainingSec = matureTime - Math.floor(Date.now() / 1000);
+        let timerText = '';
+        if (remainingSec > 0) {
+            const hours = Math.floor(remainingSec / 3600);
+            const mins = Math.floor((remainingSec % 3600) / 60);
+            const secs = remainingSec % 60;
+            if (hours > 0) {
+                timerText = `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            } else {
+                timerText = `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
+        }
+        html += `<span class="land-timer" data-mature-time="${matureTime}">${timerText}</span>`;
+    }
+    
+    // 合种标识
+    if (land.plantSize > 1) {
+        html += `<span class="land-size">${land.plantSize}×${land.plantSize}</span>`;
+    }
+    
+    html += `<span class="land-level">Lv${land.level}</span>`;
+    
+    if (land.plant.dryNum > 0 || land.plant.hasWeed || land.plant.hasInsect) {
+        let badge = '';
+        if (land.plant.dryNum > 0) badge = '💧';
+        else if (land.plant.hasWeed) badge = '🌿';
+        else if (land.plant.hasInsect) badge = '🐛';
+        html += `<span class="land-badge">${badge}</span>`;
+    }
+    
+    return html;
+}
+
 function renderLands(landsData) {
+    landsGrid = document.getElementById('lands-grid');
+    landsCount = document.getElementById('lands-count');
+    
     if (!landsData || !landsData.lands) {
-        landsGrid.innerHTML = '<p style="color:#999;grid-column:1/-1;text-align:center;">暂无土地数据</p>';
-        landsCount.textContent = '0';
+        if (landsGrid) landsGrid.innerHTML = '<p style="color:#999;grid-column:1/-1;text-align:center;">暂无土地数据</p>';
+        if (landsCount) landsCount.textContent = '0';
         return;
     }
     
     landsDataCache = landsData;
-    landsCount.textContent = landsData.unlockedLands || 0;
-    landsGrid.innerHTML = '';
+    if (landsCount) landsCount.textContent = landsData.unlockedLands || 0;
     
-    for (let i = 0; i < 24; i++) {
-        const land = landsData.lands.find(l => l.id === i + 1);
-        const cell = document.createElement('div');
+    // 首次渲染：创建所有单元格并保存引用
+    if (Object.keys(landCells).length === 0 && landsGrid) {
+        landsGrid.innerHTML = '';
+        for (let i = 1; i <= 24; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'land-cell';
+            cell.dataset.landId = i;
+            landsGrid.appendChild(cell);
+            landCells[i] = cell;
+            
+            // 添加点击事件
+            cell.addEventListener('click', () => {
+                const land = landsData.lands.find(l => l && l.id === i);
+                if (land) showLandDetail(land);
+            });
+        }
+    }
+    
+    // 增量更新：只更新有变化的数据
+    for (const land of landsData.lands) {
+        const cell = landCells[land.id];
+        if (!cell) continue;
         
+        // 计算新的class和html
+        let newClass = 'land-cell';
         if (!land || !land.unlocked) {
-            cell.className = 'land-cell locked';
-            cell.innerHTML = `<span class="land-icon">⬛</span><span class="land-name">锁定</span><span class="land-level">Lv${land?.level || 1}</span>`;
+            newClass += ' locked';
         } else if (!land.plant) {
-            cell.className = 'land-cell empty';
-            cell.innerHTML = `<span class="land-icon">⬜</span><span class="land-name">空地</span><span class="land-level">Lv${land.level}</span>`;
+            newClass += ' empty';
         } else {
-            const status = land.status || 'growing';
-            const name = land.plant?.name || '未知';
-            const image = land.plant?.image;
-            const icon = getLandIcon(status, name, image);
-            const matureTime = land.plant?.matureTime;
-            
-            cell.className = `land-cell ${status}`;
-            cell.dataset.landId = land.id;
-            cell.dataset.plant = JSON.stringify(land.plant);
-            
-            let html = `
-                <span class="land-icon">${icon}</span>
-                <span class="land-name">${name}</span>
-            `;
-            
-            // 显示成熟倒计时
-            if (matureTime && status === 'growing') {
-                const remainingSec = matureTime - Math.floor(Date.now() / 1000);
-                let timerText = '';
-                if (remainingSec > 0) {
-                    const hours = Math.floor(remainingSec / 3600);
-                    const mins = Math.floor((remainingSec % 3600) / 60);
-                    const secs = remainingSec % 60;
-                    if (hours > 0) {
-                        timerText = `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-                    } else {
-                        timerText = `${mins}:${secs.toString().padStart(2, '0')}`;
-                    }
-                }
-                html += `<span class="land-timer" data-mature-time="${matureTime}">${timerText}</span>`;
-            }
-            
-            // 季数显示已移到详情面板
-            
-            // 合种标识
-            if (land.plantSize > 1) {
-                html += `<span class="land-size">${land.plantSize}×${land.plantSize}</span>`;
-            }
-            
-            html += `<span class="land-level">Lv${land.level}</span>`;
-            
-            cell.innerHTML = html;
-            
-            if (land.plant.dryNum > 0 || land.plant.hasWeed || land.plant.hasInsect) {
-                let badge = '';
-                if (land.plant.dryNum > 0) badge = '💧';
-                else if (land.plant.hasWeed) badge = '🌿';
-                else if (land.plant.hasInsect) badge = '🐛';
-                cell.innerHTML += `<span class="land-badge">${badge}</span>`;
-            }
-            
-            cell.addEventListener('click', () => showLandDetail(land));
+            newClass += ` ${land.status || 'growing'}`;
         }
         
-        landsGrid.appendChild(cell);
+        const newHtml = generateLandCellHtml(land);
+        
+        // 只在class或内容变化时更新
+        if (cell.className !== newClass || cell.innerHTML !== newHtml) {
+            cell.className = newClass;
+            cell.innerHTML = newHtml;
+        }
     }
 }
 
@@ -819,8 +1691,8 @@ function showLandDetail(land) {
         if (!currentLand || !currentLand.plant) return;
         
         const plant = currentLand.plant;
-        const imgUrl = getPlantImageUrl(plant.name);
-        const icon = imgUrl ? `<img src="${imgUrl}" style="width:48px;height:48px;object-fit:contain;">` : '🌱';
+        const image = plant.image;
+        const icon = getLandIcon(currentLand.status, plant.name, image);
         
         let matureText = '';
         if (plant.matureTime) {
@@ -880,14 +1752,25 @@ function showLandDetail(land) {
     const modal = document.getElementById('modal-land-detail');
     modal.classList.remove('hidden');
     
-    document.getElementById('btn-close-land-detail').onclick = () => {
-        if (landDetailTimer) {
-            clearInterval(landDetailTimer);
-            landDetailTimer = null;
+    // 点击背景关闭弹窗
+    modal.onclick = function(e) {
+        if (e.target === modal) {
+            closeLandDetailModal();
         }
-        currentLandDetailId = null;
-        modal.classList.add('hidden');
     };
+    
+    // 关闭按钮事件
+    document.getElementById('btn-close-land-detail')?.addEventListener('click', closeLandDetailModal);
+}
+
+function closeLandDetailModal() {
+    const modal = document.getElementById('modal-land-detail');
+    if (landDetailTimer) {
+        clearInterval(landDetailTimer);
+        landDetailTimer = null;
+    }
+    currentLandDetailId = null;
+    modal.classList.add('hidden');
 }
 
 function getLandIcon(status, plantName, image) {
@@ -1050,7 +1933,7 @@ async function startScanRelogin() {
     }
 }
 
-// 重新登录扫码轮询
+// 重新登录
 
 async function reloginAccount(id) {
     try {
@@ -1058,56 +1941,8 @@ async function reloginAccount(id) {
         const stopRes = await fetch(`/api/accounts/${id}/stop`, { method: 'POST' });
         const stopData = await stopRes.json();
         
-        // 开始扫码
-        const res = await fetch(`/api/accounts/${id}/relogin`, { method: 'POST' });
-        const data = await res.json();
-        
-        if (!data.success) {
-            showToast(data.error || '获取二维码失败', 'error');
-            return;
-        }
-        
-        // 弹出扫码对话框
-        const modal = document.getElementById('modal-add');
-        const scanSection = document.getElementById('scan-add-section');
-        const formAdd = document.getElementById('form-add');
-        const scanQrcode = document.getElementById('scan-add-qrcode');
-        const scanStatus = document.getElementById('scan-add-status');
-        
-        formAdd.classList.add('hidden');
-        scanSection.classList.remove('hidden');
-        modal.classList.remove('hidden');
-        
-        scanQrcode.src = data.qrUrl;
-        scanStatus.textContent = '请用 QQ 扫码登录...';
-        
-        // 轮询扫码状态
-        if (reloginPollTimer) clearInterval(reloginPollTimer);
-        
-        reloginPollTimer = setInterval(async () => {
-            try {
-                const pollRes = await fetch(`/api/accounts/${id}/relogin/poll`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ loginCode: data.loginCode })
-                });
-                const pollData = await pollRes.json();
-                
-                if (pollData.success) {
-                    clearInterval(reloginPollTimer);
-                    reloginPollTimer = null;
-                    modal.classList.add('hidden');
-                    showToast('重新登录成功', 'success');
-                    loadAccounts();
-                } else if (pollData.error) {
-                    clearInterval(reloginPollTimer);
-                    reloginPollTimer = null;
-                    showToast(pollData.error, 'error');
-                }
-            } catch (e) {
-                console.error('轮询错误:', e);
-            }
-        }, 2000);
+        // 弹出重新登录对话框（默认显示手动输入）
+        openReloginModal(id);
         
     } catch (e) {
         showToast('重新登录失败: ' + e.message, 'error');
@@ -1139,6 +1974,57 @@ async function restartAccount(id) {
         }
     } catch (e) {
         showToast('重启失败: ' + e.message, 'error');
+    }
+}
+
+function extractGids(text) {
+    const matches = text.match(/\d+/g);
+    return [...new Set(matches?.filter(g => /^1\d{9}$/.test(g)) || [])];
+}
+
+async function importFriendGids() {
+    if (!selectedAccountId) {
+        showToast('请先选择账号', 'error');
+        return;
+    }
+    const input = document.getElementById('friend-import-input');
+    const text = input?.value || '';
+    const gids = extractGids(text);
+    if (gids.length === 0) {
+        showToast('未找到有效的GID', 'error');
+        return;
+    }
+    try {
+        const res = await fetch(`/api/friend-cache/import-gids`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accountId: selectedAccountId, gids })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`成功导入 ${data.count} 个GID，共 ${data.total} 个`, 'success');
+            if (input) input.value = '';
+            loadFriends(selectedAccountId);
+        } else {
+            showToast(data.message || '导入失败', 'error');
+        }
+    } catch (e) {
+        showToast('导入失败: ' + e.message, 'error');
+    }
+}
+
+async function viewFriendGids(accountId) {
+    try {
+        const res = await fetch(`/api/friend-cache?accountId=${accountId}`);
+        const data = await res.json();
+        if (data.success && data.data && data.data.length > 0) {
+            const gids = data.data.map(f => f.gid).join('\n');
+            alert(`已导入的GID列表（共${data.data.length}个）：\n\n${gids}`);
+        } else {
+            showToast('暂无导入的GID', 'info');
+        }
+    } catch (e) {
+        showToast('获取失败: ' + e.message, 'error');
     }
 }
 
@@ -1187,26 +2073,80 @@ async function updateConfig(id, config) {
 }
 
 function setupEventListeners() {
-    document.getElementById('btn-refresh').addEventListener('click', loadAccounts);
+    const btnRefresh = document.getElementById('btn-refresh');
+    if (btnRefresh) btnRefresh.addEventListener('click', loadAccounts);
     
-    document.getElementById('btn-add-account').addEventListener('click', () => {
+    const btnConfig = document.getElementById('btn-config');
+    if (btnConfig) {
+        btnConfig.addEventListener('click', () => {
+            if (!selectedAccountId) {
+                showToast('请先选择账号', 'error');
+                return;
+            }
+            const acc = accounts.find(a => a.id === selectedAccountId);
+            if (!acc) return;
+            
+            const form = document.getElementById('form-config');
+            form.accountId.value = acc.id;
+            form.farmInterval.value = acc.config?.farmInterval || 1;
+            form.friendInterval.value = acc.config?.friendInterval || 2;
+            form.harvestDelay.value = acc.config?.harvestDelay || 0;
+            form.stealDelay.value = acc.config?.stealDelay || 0;
+            
+            // 种植策略
+            if (form.plantingStrategy) {
+                form.plantingStrategy.value = acc.config?.plantingStrategy || 'preferred';
+                updateBagSeedGroupVisibility(form.plantingStrategy.value);
+            }
+            
+            // 优先种植种子
+            if (form.preferredSeedId) {
+                form.preferredSeedId.value = acc.config?.preferredSeedId || 0;
+                loadPreferredSeedOptions(acc.id);
+            }
+            
+            form.autoFriend.checked = acc.config?.autoFriend || false;
+            form.autoSteal.checked = acc.config?.autoSteal || false;
+            form.autoClaim.checked = acc.config?.autoClaim || false;
+            form.autoFarm.checked = acc.config?.autoFarm || false;
+            form.autoFertilize.checked = acc.config?.autoFertilize || false;
+            if (form.autoFertilizeNormal) form.autoFertilizeNormal.checked = acc.config?.autoFertilizeNormal || false;
+            if (form.autoFertilizeOrganic) form.autoFertilizeOrganic.checked = acc.config?.autoFertilizeOrganic || false;
+            
+            // 施肥范围
+            const fertilizerLandTypes = acc.config?.fertilizerLandTypes || ['gold', 'black', 'red', 'normal'];
+            if (form.fertilizerLandTypes) {
+                form.fertilizerLandTypes.forEach(cb => {
+                    cb.checked = fertilizerLandTypes.includes(cb.value);
+                });
+            }
+            
+            // 多季补肥
+            if (form.fertilizerMultiSeason) {
+                form.fertilizerMultiSeason.checked = acc.config?.fertilizerMultiSeason || false;
+            }
+            
+            form.autoLandUnlock.checked = acc.config?.autoLandUnlock || false;
+            form.autoLandUpgrade.checked = acc.config?.autoLandUpgrade || false;
+            form.autoSell.checked = acc.config?.autoSell || false;
+            form.autoBuyFertilizer.checked = acc.config?.autoBuyFertilizer || false;
+            if (form.autoBuyFertilizerNormal) form.autoBuyFertilizerNormal.checked = acc.config?.autoBuyFertilizerNormal || false;
+            if (form.autoBuyFertilizerOrganic) form.autoBuyFertilizerOrganic.checked = acc.config?.autoBuyFertilizerOrganic || false;
+            form.autoUseFertilizer.checked = acc.config?.autoUseFertilizer || false;
+            
+            document.getElementById('modal-config').classList.remove('hidden');
+            
+            loadRankingAndSeeds(acc);
+        });
+    }
+    
+    const btnScanInAdd = document.getElementById('btn-scan-in-add');
+    if (btnScanInAdd) btnScanInAdd.addEventListener('click', startScanInAdd);
+    
+    const btnScanAddCancel = document.getElementById('btn-scan-add-cancel');
+    if (btnScanAddCancel) btnScanAddCancel.addEventListener('click', () => {
         document.getElementById('scan-add-section').classList.add('hidden');
         document.getElementById('form-add').classList.remove('hidden');
-        document.getElementById('form-add').reset();
-        modalAdd.classList.remove('hidden');
-    });
-    
-    document.getElementById('btn-scan-in-add').addEventListener('click', startScanInAdd);
-    
-    document.getElementById('btn-scan-add-cancel').addEventListener('click', () => {
-        document.getElementById('scan-add-section').classList.add('hidden');
-        document.getElementById('form-add').classList.remove('hidden');
-    });
-    
-    document.getElementById('btn-close-detail').addEventListener('click', () => {
-        selectedAccountId = null;
-        detailPanel.classList.add('hidden');
-        renderAccounts();
     });
     
     const btnEdit = document.getElementById('btn-edit');
@@ -1271,15 +2211,20 @@ function setupEventListeners() {
         const form = e.target;
         const id = form.accountId.value;
         
-        // 从 select 元素获取选中的种子
-        const seedSelect = document.getElementById('seed-pool-select');
-        const selectedSeedVal = seedSelect ? seedSelect.value : '';
+        // 获取施肥范围
+        const fertilizerLandTypes = Array.from(form.fertilizerLandTypes || [])
+            .filter(cb => cb.checked)
+            .map(cb => cb.value);
         
         const config = {
             farmInterval: parseInt(form.farmInterval.value),
             friendInterval: parseInt(form.friendInterval.value),
             harvestDelay: parseInt(form.harvestDelay.value),
             stealDelay: parseInt(form.stealDelay.value),
+            // 种植策略
+            plantingStrategy: form.plantingStrategy ? form.plantingStrategy.value : 'preferred',
+            preferredSeedId: form.preferredSeedId ? parseInt(form.preferredSeedId.value) || 0 : 0,
+            bagSeedPriority: getBagSeedPriorityFromUI(),
             // 好友互动
             autoFriend: form.autoFriend ? form.autoFriend.checked : false,
             // 自动偷菜
@@ -1291,6 +2236,9 @@ function setupEventListeners() {
             autoFertilize: form.autoFertilize ? form.autoFertilize.checked : false,
             autoFertilizeNormal: form.autoFertilizeNormal ? form.autoFertilizeNormal.checked : false,
             autoFertilizeOrganic: form.autoFertilizeOrganic ? form.autoFertilizeOrganic.checked : false,
+            // 施肥范围和多季补肥
+            fertilizerLandTypes: fertilizerLandTypes,
+            fertilizerMultiSeason: form.fertilizerMultiSeason ? form.fertilizerMultiSeason.checked : false,
             autoLandUnlock: form.autoLandUnlock ? form.autoLandUnlock.checked : false,
             autoLandUpgrade: form.autoLandUpgrade ? form.autoLandUpgrade.checked : false,
             autoSell: form.autoSell ? form.autoSell.checked : false,
@@ -1298,7 +2246,6 @@ function setupEventListeners() {
             autoBuyFertilizerNormal: form.autoBuyFertilizerNormal ? form.autoBuyFertilizerNormal.checked : false,
             autoBuyFertilizerOrganic: form.autoBuyFertilizerOrganic ? form.autoBuyFertilizerOrganic.checked : false,
             autoUseFertilizer: form.autoUseFertilizer ? form.autoUseFertilizer.checked : false,
-            selectedSeed: selectedSeedVal || null,
             notStealPlants: Array.from(document.querySelectorAll('#notStealList input[name="notStealPlant"]:checked')).map(cb => cb.value)
         };
         
@@ -1522,8 +2469,10 @@ async function pollScanStatusInAdd(loginCode) {
 }
 
 function renderAccountLogs(accountId) {
-    const logsDiv = document.getElementById('account-logs');
+    const logsDiv = document.getElementById('home-logs');
     if (!logsDiv) return;
+    
+    const wasAtBottom = logsDiv.scrollHeight - logsDiv.scrollTop - logsDiv.clientHeight < 50;
     
     logsDiv.innerHTML = '';
     
@@ -1531,11 +2480,17 @@ function renderAccountLogs(accountId) {
     for (const log of logs) {
         appendLog(accountId, log.level, log.message, log.timestamp);
     }
+    
+    if (wasAtBottom) {
+        logsDiv.scrollTop = logsDiv.scrollHeight;
+    }
 }
 
 function appendLog(accountId, level, message, timestamp) {
-    const logsDiv = document.getElementById('account-logs');
+    const logsDiv = document.getElementById('home-logs');
     if (!logsDiv) return;
+    
+    const wasAtBottom = logsDiv.scrollHeight - logsDiv.scrollTop - logsDiv.clientHeight < 50;
     
     const entry = document.createElement('div');
     entry.className = `log-entry log-${level}`;
@@ -1544,39 +2499,42 @@ function appendLog(accountId, level, message, timestamp) {
     entry.innerHTML = timeStr + message;
     logsDiv.appendChild(entry);
     
-    // 限制显示的日志数量，移除旧日志
     while (logsDiv.children.length > MAX_LOGS_PER_ACCOUNT) {
         logsDiv.removeChild(logsDiv.firstChild);
     }
     
-    // 只有在自动滚动模式下才滚动
-    if (window.autoScrollLogs) {
+    if (wasAtBottom) {
         logsDiv.scrollTop = logsDiv.scrollHeight;
+    }
+    
+    // 同时更新主页日志
+    if (accountId === selectedAccountId && currentTab === 'home') {
+        renderHomeLogs();
     }
 }
 
-// 切换自动滚动
-function toggleAutoScroll() {
-    window.autoScrollLogs = !window.autoScrollLogs;
-    const btn = document.getElementById('btn-auto-scroll');
-    if (btn) {
-        btn.textContent = window.autoScrollLogs ? '🔒 自动滚动' : '🔓 取消锁定';
-        btn.classList.toggle('active', window.autoScrollLogs);
-    }
-    if (window.autoScrollLogs) {
-        const logsDiv = document.getElementById('account-logs');
-        if (logsDiv) logsDiv.scrollTop = logsDiv.scrollHeight;
-    }
+function clearLogs() {
+    if (!selectedAccountId) return;
+    accountLogs[selectedAccountId] = [];
+    saveLogsToStorage();
+    const logsDiv = document.getElementById('home-logs');
+    if (logsDiv) logsDiv.innerHTML = '';
 }
 
 async function deleteAccount(id) {
+    const acc = accounts.find(a => a.id === id);
+    const name = acc?.name || id;
+    if (!confirm(`确定要删除账号 "${name}" 吗？此操作不可恢复。`)) {
+        return;
+    }
+    
     try {
         const res = await fetch(`/api/accounts/${id}`, { method: 'DELETE' });
         const data = await res.json();
         if (data.success) {
             showToast('账号已删除', 'success');
             selectedAccountId = null;
-            detailPanel.classList.add('hidden');
+            if (detailPanel) detailPanel.classList.add('hidden');
             loadAccounts();
         } else {
             showToast(data.error || '删除失败', 'error');

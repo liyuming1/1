@@ -8,58 +8,200 @@
 </head>
 <body>
     <header>
-        <h1>🌾 农场管理系统</h1>
+        <button id="btn-menu" class="btn btn-icon">☰</button>
+        
         <div class="header-actions">
-            <button id="btn-refresh" class="btn btn-primary">刷新</button>
-            <button id="btn-add-account" class="btn btn-success">添加账号</button>
-            <span id="connection-status" class="status-disconnected">未连接</span>
+            <button id="btn-config" class="btn btn-icon" title="配置">⚙️</button>
+            <button id="btn-refresh" class="btn btn-primary btn-sm">⟳</button>
         </div>
     </header>
     
     <main>
-        <div id="accounts-grid" class="accounts-grid"></div>
+        <!-- 主页Tab -->
+        <div id="tab-home" class="tab-content">
+            <div class="home-section">
+                <div id="home-account-card" class="home-account-card"></div>
+                <div class="stats-section">
+                    <h3>📊 今日统计</h3>
+                    <div id="home-stats" class="detail-stats"></div>
+                </div>
+                <div class="logs-section">
+                    <h3>📋 运行日志 <button id="btn-clear-logs" class="btn btn-sm" onclick="clearLogs()">🗑️ 清除</button></h3>
+                    <div id="home-logs" class="home-logs"></div>
+                </div>
+            </div>
+        </div>
         
-        <div id="detail-panel" class="detail-panel hidden">
-            <div class="detail-header">
-                <h2 id="detail-title">账号详情</h2>
-                <div class="header-tabs">
-                    <button id="btn-close-detail" class="btn btn-small">×</button>
+        <!-- 土地Tab -->
+        <div id="tab-lands" class="tab-content active">
+            <div class="detail-panel" id="lands-panel">
+                <div class="lands-section">
+                    <h3>🌾 土地状态 (<span id="lands-count">0</span>块)</h3>
+                    <div id="lands-grid" class="lands-grid"></div>
+                    <div class="lands-legend">
+                        <span class="legend-item ready">🥕 成熟</span>
+                        <span class="legend-item growing">🌱 生长中</span>
+                        <span class="legend-item needsWater">💧 缺水</span>
+                        <span class="legend-item needsWeed">🌿 有草</span>
+                        <span class="legend-item needsInsect">🐛 有虫</span>
+                        <span class="legend-item empty">⬜ 空地</span>
+                        <span class="legend-item locked">⬛ 锁定</span>
+                    </div>
                 </div>
             </div>
-            
-            <div class="stats-section">
-                <h3>📊 今日统计</h3>
-                <div id="detail-stats" class="detail-stats"></div>
-            </div>
-            
-            <div class="lands-section">
-                <h3>🌾 土地状态 (<span id="lands-count">0</span>块)</h3>
-                <div id="lands-grid" class="lands-grid"></div>
-                <div class="lands-legend">
-                    <span class="legend-item ready">🥕 成熟</span>
-                    <span class="legend-item growing">🌱 生长中</span>
-                    <span class="legend-item needsWater">💧 缺水</span>
-                    <span class="legend-item needsWeed">🌿 有草</span>
-                    <span class="legend-item needsInsect">🐛 有虫</span>
-                    <span class="legend-item empty">⬜ 空地</span>
-                    <span class="legend-item locked">⬛ 锁定</span>
-                </div>
-            </div>
-            
-            <!-- 背包区域 -->
+        </div>
+        
+        <!-- 背包Tab -->
+        <div id="tab-bag" class="tab-content">
             <div class="bag-section">
                 <h3>🎒 背包 <span id="bag-count" class="text-muted">(0种物品)</span></h3>
                 <div id="bag-grid" class="bag-grid"></div>
             </div>
-            
-            <!-- 日志区域 -->
-            <div class="logs-section">
-                <h3>📋 运行日志</h3>
-                <button id="btn-auto-scroll" class="btn btn-sm btn-primary" onclick="toggleAutoScroll()">🔒 自动滚动</button>
-                <div id="account-logs" class="account-logs"></div>
+        </div>
+        
+        <!-- 数据分析Tab -->
+        <div id="tab-analytics" class="tab-content">
+            <div class="analytics-section">
+                <h3>📊 数据分析</h3>
+                
+                <!-- 策略推荐面板 -->
+                <div class="strategy-panel">
+                    <div class="strategy-header">
+                        <span class="strategy-title">🎯 策略推荐</span>
+                        <div class="strategy-level-input">
+                            <label>Lv.</label>
+                            <input type="number" id="strategy-level" value="1" min="1" max="100" onchange="loadAnalytics()">
+                        </div>
+                    </div>
+                    <div class="strategy-cards">
+                        <div class="strategy-card" data-color="purple">
+                            <div class="strategy-card-header">
+                                <span class="strategy-icon">📈</span>
+                                <span class="strategy-label">经验/时</span>
+                            </div>
+                            <div class="strategy-plant" id="strategy-exp">
+                                <div class="strategy-empty">暂无数据</div>
+                            </div>
+                        </div>
+                        <div class="strategy-card" data-color="amber">
+                            <div class="strategy-card-header">
+                                <span class="strategy-icon">💰</span>
+                                <span class="strategy-label">利润/时</span>
+                            </div>
+                            <div class="strategy-plant" id="strategy-profit">
+                                <div class="strategy-empty">暂无数据</div>
+                            </div>
+                        </div>
+                        <div class="strategy-card" data-color="blue">
+                            <div class="strategy-card-header">
+                                <span class="strategy-icon">🧪</span>
+                                <span class="strategy-label">普肥经验/时</span>
+                            </div>
+                            <div class="strategy-plant" id="strategy-fert-exp">
+                                <div class="strategy-empty">暂无数据</div>
+                            </div>
+                        </div>
+                        <div class="strategy-card" data-color="green">
+                            <div class="strategy-card-header">
+                                <span class="strategy-icon">🐷</span>
+                                <span class="strategy-label">普肥利润/时</span>
+                            </div>
+                            <div class="strategy-plant" id="strategy-fert-profit">
+                                <div class="strategy-empty">暂无数据</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="strategy-tip" id="strategy-tip"></div>
+                </div>
+                
+                <div class="analytics-controls">
+                    <div class="form-group-inline">
+                        <label>排序:</label>
+                        <select id="analytics-sort" onchange="loadAnalytics()">
+                            <option value="exp">经验/时</option>
+                            <option value="fert">普肥经验/时</option>
+                            <option value="profit">利润/时</option>
+                            <option value="fert_profit">普肥利润/时</option>
+                            <option value="level">作物等级</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="analytics-list" class="analytics-list"></div>
+            </div>
+        </div>
+        
+        <!-- 访客Tab -->
+        <div id="tab-visitors" class="tab-content">
+            <div class="visitors-section">
+                <h3>👥 访客记录 <button id="btn-refresh-visitors" class="btn btn-sm" onclick="loadVisitors()">🔄</button></h3>
+                <div class="filter-btns">
+                    <button class="filter-btn active" data-filter="all" onclick="filterVisitors('all')">全部</button>
+                    <button class="filter-btn" data-filter="1" onclick="filterVisitors('1')">偷菜</button>
+                    <button class="filter-btn" data-filter="2" onclick="filterVisitors('2')">帮忙</button>
+                    <button class="filter-btn" data-filter="3" onclick="filterVisitors('3')">捣乱</button>
+                </div>
+                <div id="visitors-list" class="visitors-list"></div>
+            </div>
+        </div>
+        
+        <!-- 好友Tab -->
+        <div id="tab-friends" class="tab-content">
+            <div class="friends-section">
+                <h3>👫 好友列表 <button id="btn-refresh-friends" class="btn btn-sm" onclick="loadFriends()">🔄</button></h3>
+                <div class="friend-import-box">
+                    <input type="text" id="friend-search" class="friend-search" placeholder="搜索好友..." oninput="searchFriends(this.value)">
+                    <input type="text" id="friend-import-input" class="friend-import-input" placeholder="输入GID">
+                    <button class="btn btn-info btn-sm" onclick="importFriendGids()">导入</button>
+                </div>
+                <div id="friends-list" class="friends-list"></div>
             </div>
         </div>
     </main>
+    
+    <!-- 底部导航 -->
+    <nav class="bottom-nav">
+        <button class="nav-item" data-tab="home">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-label">主页</span>
+        </button>
+        <button class="nav-item" data-tab="lands">
+            <span class="nav-icon">🌾</span>
+            <span class="nav-label">土地</span>
+        </button>
+        <button class="nav-item" data-tab="bag">
+            <span class="nav-icon">🎒</span>
+            <span class="nav-label">背包</span>
+        </button>
+        <button class="nav-item" data-tab="analytics">
+            <span class="nav-icon">📊</span>
+            <span class="nav-label">分析</span>
+        </button>
+        <button class="nav-item" data-tab="visitors">
+            <span class="nav-icon">👥</span>
+            <span class="nav-label">访客</span>
+        </button>
+        <button class="nav-item" data-tab="friends">
+            <span class="nav-icon">👫</span>
+            <span class="nav-label">好友</span>
+        </button>
+    </nav>
+    
+    <!-- 侧边栏 -->
+    <div id="sidebar" class="sidebar hidden">
+        <div class="sidebar-header">
+            <h3>菜单</h3>
+            <button id="btn-close-sidebar" class="btn-close">&times;</button>
+        </div>
+        <div class="sidebar-actions">
+            <button id="btn-add-account-sidebar" class="btn btn-success btn-block">+ 添加账号</button>
+            <button id="btn-refresh-all" class="btn btn-primary btn-block">🔄 刷新</button>
+        </div>
+        <div class="sidebar-accounts">
+            <h4>账号列表</h4>
+            <div id="sidebar-accounts-list" class="sidebar-accounts-list"></div>
+        </div>
+    </div>
+    <div id="sidebar-overlay" class="sidebar-overlay hidden"></div>
     
     <div id="modal-add" class="modal hidden">
         <div class="modal-content">
@@ -156,9 +298,38 @@
                     <label>偷菜<input type="number" name="stealDelay" min="0" value="0">秒</label>
                 </div>
                 
+                <!-- 种植策略 -->
                 <div class="form-group">
-                    <label>种子选择 (默认推荐施肥第一名)</label>
-                    <div id="seed-selection" class="seed-selection"></div>
+                    <label>种植策略</label>
+                    <select name="plantingStrategy" id="plantingStrategy" onchange="updateBagSeedGroupVisibility(this.value)">
+                        <option value="preferred">优先种植</option>
+                        <option value="bag_priority">背包种子优先</option>
+                        <option value="level">最高等级</option>
+                        <option value="max_exp">经验优先</option>
+                        <option value="max_fert_exp">普肥经验优先</option>
+                        <option value="max_profit">利润优先</option>
+                        <option value="max_fert_profit">普肥利润优先</option>
+                    </select>
+                </div>
+                
+                <!-- 优先种植种子选择 -->
+                <div class="form-group" id="preferred-seed-group" style="display:none;">
+                    <label>优先种植种子</label>
+                    <select name="preferredSeedId" id="preferredSeedId">
+                        <option value="0">自动选择</option>
+                    </select>
+                </div>
+                
+                <!-- 背包种子优先级 -->
+                <div class="form-group" id="bag-seed-group" style="display:none;">
+                    <div class="bag-seed-header">
+                        <label>背包种子优先级</label>
+                        <div class="bag-seed-actions">
+                            <button type="button" class="btn-link" onclick="refreshBagSeeds()">刷新</button>
+                            <button type="button" class="btn-link" onclick="resetBagSeedPriority()">重置排序</button>
+                        </div>
+                    </div>
+                    <div id="bag-seed-list" class="bag-seed-list"></div>
                 </div>
                 
                 <!-- 好友互动 -->
@@ -192,6 +363,23 @@
                         <input type="checkbox" name="autoFertilizeOrganic">
                         <strong>有机肥</strong>
                     </label>
+                </div>
+                
+                <!-- 施肥范围 -->
+                <div class="form-group">
+                    <label>施肥范围</label>
+                    <div class="checkbox-group">
+                        <label><input type="checkbox" name="fertilizerLandTypes" value="normal"> 普通</label>
+                        <label><input type="checkbox" name="fertilizerLandTypes" value="red"> 红土地</label>
+                        <label><input type="checkbox" name="fertilizerLandTypes" value="black"> 黑土地</label>
+                        <label><input type="checkbox" name="fertilizerLandTypes" value="gold"> 金土地</label>
+                    </div>
+                </div>
+                
+                <!-- 多季补肥 -->
+                <div class="form-group checkbox-label">
+                    <input type="checkbox" name="fertilizerMultiSeason">
+                    <strong>多季补肥</strong>
                 </div>
                 <div class="form-group checkbox-label">
                     <input type="checkbox" name="autoSteal">
@@ -239,13 +427,6 @@
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">保存</button>
                     <button type="button" class="btn btn-cancel btn-config-cancel">取消</button>
-                </div>
-                
-                <div class="ranking-section">
-                    <h3>🏆 经验排行榜</h3>
-                    <div id="ranking-display" class="ranking-display">
-                        <p class="text-muted">选择账号后显示排行榜</p>
-                    </div>
                 </div>
             </form>
         </div>
@@ -306,11 +487,26 @@
     
     <!-- 土地详情弹窗 -->
     <div id="modal-land-detail" class="modal hidden">
-        <div class="modal-content">
-            <h2>土地详情</h2>
-            <div id="land-detail-content"></div>
-            <div class="form-actions">
-                <button id="btn-close-land-detail" class="btn btn-primary">关闭</button>
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <span>土地详情</span>
+                <button class="modal-close" onclick="closeLandDetailModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="land-detail-content"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 好友土地详情弹窗 -->
+    <div id="friend-land-modal" class="modal" style="display:none;">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <span id="modal-friend-name">好友土地</span>
+                <button class="modal-close" onclick="closeFriendLandModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="modal-friend-lands" class="lands-grid friend-grid"></div>
             </div>
         </div>
     </div>
