@@ -21,8 +21,9 @@ enum EnterReason {
 
 // ============ 进入好友农场 ============
 message EnterRequest {
-    int64 host_gid = 1;      // 好友的GID
+    int64 host_gid = 1;      // 好友的GID (兼容旧版)
     int32 reason = 2;        // EnterReason 进入原因
+    string host_open_id = 11; // 好友的QID (open_id)，优先使用
 }
 
 message EnterReply {
@@ -34,7 +35,8 @@ message EnterReply {
 
 // ============ 离开好友农场 ============
 message LeaveRequest {
-    int64 host_gid = 1;      // 好友的GID
+    int64 host_gid = 1;      // 好友的GID (兼容旧版)
+    string host_open_id = 11; // 好友的QID (open_id)
 }
 
 message LeaveReply {

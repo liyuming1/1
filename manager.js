@@ -27,6 +27,15 @@ try {
     console.log('[API] 经验计算模块加载失败:', e.message);
 }
 
+let getPlantRankings;
+
+try {
+    const analyticsModule = require('./src/analytics');
+    getPlantRankings = analyticsModule.getPlantRankings;
+} catch (e) {
+    console.log('[API] 数据分析模块加载失败:', e.message);
+}
+
 const DEFAULT_PORT = 3000;
 const ACCOUNTS_DIR = path.join(__dirname, 'accounts');
 
@@ -41,7 +50,7 @@ class AccountInstance {
             status: 'stopped',
             startTime: null,
             stopReason: '',
-            data: { gid: 0, name: '', level: 0, gold: 0, exp: 0 },
+            data: { gid: 0, name: '', level: 0, gold: 0, exp: 0, voucher: 0, beans: 0 },
             lands: null,
             stats: {
                 date: new Date().toLocaleDateString(),
@@ -212,6 +221,15 @@ class AccountManager {
                     if (fs.existsSync(configPath)) {
                         config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
                     }
+                    // 合并默认配置
+                    const defaultConfig = {
+                        plantingStrategy: 'preferred',
+                        preferredSeedId: 0,
+                        bagSeedPriority: [],
+                        fertilizerLandTypes: ['gold', 'black', 'red', 'normal'],
+                        fertilizerMultiSeason: false,
+                    };
+                    config = { ...defaultConfig, ...config };
                     this.accounts.set(acc.id, new AccountInstance(acc.id, config, this));
                 }
                 console.log(`[Manager] 已加载 ${this.accounts.size} 个账号`);
@@ -275,6 +293,10 @@ class AccountManager {
                     friendInterval: acc.config.friendInterval,
                     harvestDelay: acc.config.harvestDelay || 0,
                     stealDelay: acc.config.stealDelay || 0,
+                    // 种植策略
+                    plantingStrategy: acc.config.plantingStrategy || 'preferred',
+                    preferredSeedId: acc.config.preferredSeedId || 0,
+                    bagSeedPriority: acc.config.bagSeedPriority || [],
                     // 好友互动
                     autoFriend: acc.config.autoFriend,
                     // 自动偷菜
@@ -286,6 +308,9 @@ class AccountManager {
                     autoFertilize: acc.config.autoFertilize,
                     autoFertilizeNormal: acc.config.autoFertilizeNormal,
                     autoFertilizeOrganic: acc.config.autoFertilizeOrganic,
+                    // 施肥范围和多季补肥
+                    fertilizerLandTypes: acc.config.fertilizerLandTypes || ['gold', 'black', 'red', 'normal'],
+                    fertilizerMultiSeason: acc.config.fertilizerMultiSeason || false,
                     autoLandUnlock: acc.config.autoLandUnlock,
                     autoLandUpgrade: acc.config.autoLandUpgrade,
                     autoSell: acc.config.autoSell,
@@ -347,6 +372,13 @@ class AccountManager {
                 autoFertilize: false,
                 autoFertilizeNormal: false,
                 autoFertilizeOrganic: false,
+                // 种植策略
+                plantingStrategy: 'preferred',
+                preferredSeedId: 0,
+                bagSeedPriority: [],
+                // 施肥范围和多季补肥
+                fertilizerLandTypes: ['gold', 'black', 'red', 'normal'],
+                fertilizerMultiSeason: false,
                 autoLandUnlock: false,
                 autoLandUpgrade: false,
                 autoSell: false,
@@ -689,6 +721,317 @@ class AccountManager {
             }
         });
 
+        // 导入GID到好友缓存
+        this.app.post('/api/friend-cache/import-gids', (req, res) => {
+            const { accountId, gids } = req.body;
+            if (!accountId) {
+                return res.status(400).json({ success: false, message: '缺少账号ID' });
+            }
+            if (!Array.isArray(gids) || gids.length === 0) {
+                return res.status(400).json({ success: false, message: 'GID列表为空' });
+            }
+
+            const friendCache = require('./src/friendCache');
+            friendCache.setAccountId(accountId);
+            
+            const result = friendCache.importFriendGids(gids);
+            res.json({
+                success: true,
+                count: result.count,
+                total: result.total,
+                message: result.message
+            });
+        });
+
+        // 获取好友缓存
+        this.app.get('/api/friend-cache', (req, res) => {
+            const accountId = req.query.accountId;
+            if (!accountId) {
+                return res.status(400).json({ success: false, message: '缺少账号ID' });
+            }
+            
+            const friendCache = require('./src/friendCache');
+            friendCache.setAccountId(accountId);
+            const cache = friendCache.getFriendCache();
+            
+            res.json({ success: true, data: cache });
+        });
+
+        // 获取黑名单
+        this.app.get('/api/blacklist', (req, res) => {
+            const accountId = req.query.accountId;
+            if (!accountId) {
+                return res.status(400).json({ success: false, message: '缺少账号ID' });
+            }
+            
+            const friendCache = require('./src/friendCache');
+            friendCache.setAccountId(accountId);
+            const list = friendCache.getBlacklist();
+            
+            res.json({ success: true, data: list });
+        });
+
+        // 添加到黑名单
+        this.app.post('/api/blacklist', (req, res) => {
+            const { accountId, gid } = req.body;
+            if (!accountId) {
+                return res.status(400).json({ success: false, message: '缺少账号ID' });
+            }
+            if (!gid) {
+                return res.status(400).json({ success: false, message: '缺少GID' });
+            }
+            
+            const friendCache = require('./src/friendCache');
+            friendCache.setAccountId(accountId);
+            const result = friendCache.addToBlacklist(gid);
+            
+            res.json(result);
+        });
+
+        // 从黑名单移除
+        this.app.delete('/api/blacklist/:gid', (req, res) => {
+            const accountId = req.query.accountId;
+            const gid = req.params.gid;
+            
+            if (!accountId) {
+                return res.status(400).json({ success: false, message: '缺少账号ID' });
+            }
+            if (!gid) {
+                return res.status(400).json({ success: false, message: '缺少GID' });
+            }
+            
+            const friendCache = require('./src/friendCache');
+            friendCache.setAccountId(accountId);
+            const result = friendCache.removeFromBlacklist(gid);
+            
+            res.json(result);
+        });
+
+        // 获取访客记录
+        this.app.get('/api/interact-records', async (req, res) => {
+            const accountId = req.query.accountId;
+            if (!accountId) {
+                return res.status(400).json({ success: false, message: '缺少账号ID' });
+            }
+            
+            const acc = this.accounts.get(accountId);
+            if (!acc || acc.state.status !== 'running') {
+                return res.status(400).json({ success: false, message: '账号未运行' });
+            }
+            
+            try {
+                const result = await new Promise((resolve, reject) => {
+                    const callId = Date.now();
+                    
+                    const handleResponse = (msg) => {
+                        if (!msg || msg.type !== 'api_response' || msg.id !== callId) return;
+                        
+                        if (acc && acc.process) {
+                            acc.process.removeListener('message', handleResponse);
+                        }
+                        
+                        if (msg.error) {
+                            reject(new Error(msg.error));
+                        } else {
+                            resolve(msg.result);
+                        }
+                    };
+                    
+                    acc.process.on('message', handleResponse);
+                    
+                    acc.process.send({
+                        type: 'api_call',
+                        id: callId,
+                        method: 'getInteractRecords',
+                        args: []
+                    });
+                    
+                    setTimeout(() => {
+                        if (acc && acc.process) {
+                            acc.process.removeListener('message', handleResponse);
+                        }
+                        reject(new Error('超时'));
+                    }, 10000);
+                });
+                
+                res.json({ success: true, data: result });
+            } catch (e) {
+                res.status(500).json({ success: false, message: e.message });
+            }
+        });
+
+        // 获取好友列表
+        this.app.get('/api/friends', async (req, res) => {
+            const accountId = req.query.accountId;
+            if (!accountId) {
+                return res.status(400).json({ success: false, message: '缺少账号ID' });
+            }
+            
+            const acc = this.accounts.get(accountId);
+            if (!acc || acc.state.status !== 'running') {
+                return res.status(400).json({ success: false, message: '账号未运行' });
+            }
+            
+            try {
+                const result = await new Promise((resolve, reject) => {
+                    const callId = Date.now();
+                    
+                    const handleResponse = (msg) => {
+                        if (!msg || msg.type !== 'api_response' || msg.id !== callId) return;
+                        
+                        if (acc && acc.process) {
+                            acc.process.removeListener('message', handleResponse);
+                        }
+                        
+                        if (msg.error) {
+                            reject(new Error(msg.error));
+                        } else {
+                            resolve(msg.result);
+                        }
+                    };
+                    
+                    acc.process.on('message', handleResponse);
+                    
+                    acc.process.send({
+                        type: 'api_call',
+                        id: callId,
+                        method: 'getFriendsList',
+                        args: []
+                    });
+                    
+                    setTimeout(() => {
+                        if (acc && acc.process) {
+                            acc.process.removeListener('message', handleResponse);
+                        }
+                        reject(new Error('超时'));
+                    }, 10000);
+                });
+                
+                res.json({ success: true, data: result });
+            } catch (e) {
+                res.status(500).json({ success: false, message: e.message });
+            }
+        });
+
+        // 获取好友土地
+        this.app.get('/api/friend/:gid/lands', async (req, res) => {
+            const accountId = req.query.accountId;
+            const friendGid = req.params.gid;
+            
+            if (!accountId) {
+                return res.status(400).json({ success: false, message: '缺少账号ID' });
+            }
+            
+            if (!friendGid) {
+                return res.status(400).json({ success: false, message: '缺少好友GID' });
+            }
+            
+            const acc = this.accounts.get(accountId);
+            if (!acc || acc.state.status !== 'running') {
+                return res.status(400).json({ success: false, message: '账号未运行' });
+            }
+            
+            try {
+                const result = await new Promise((resolve, reject) => {
+                    const callId = Date.now();
+                    
+                    const handleResponse = (msg) => {
+                        if (!msg || msg.type !== 'api_response' || msg.id !== callId) return;
+                        
+                        if (acc && acc.process) {
+                            acc.process.removeListener('message', handleResponse);
+                        }
+                        
+                        if (msg.error) {
+                            reject(new Error(msg.error));
+                        } else {
+                            resolve(msg.result);
+                        }
+                    };
+                    
+                    acc.process.on('message', handleResponse);
+                    
+                    acc.process.send({
+                        type: 'api_call',
+                        id: callId,
+                        method: 'getFriendLands',
+                        args: [friendGid]
+                    });
+                    
+                    setTimeout(() => {
+                        if (acc && acc.process) {
+                            acc.process.removeListener('message', handleResponse);
+                        }
+                        reject(new Error('超时'));
+                    }, 10000);
+                });
+                
+                res.json({ success: true, data: result });
+            } catch (e) {
+                res.status(500).json({ success: false, message: e.message });
+            }
+        });
+
+        // 好友操作
+        this.app.post('/api/friend/:gid/op', async (req, res) => {
+            const accountId = req.query.accountId;
+            const friendGid = req.params.gid;
+            const { op } = req.body;
+            
+            if (!accountId) {
+                return res.status(400).json({ success: false, message: '缺少账号ID' });
+            }
+            
+            if (!op) {
+                return res.status(400).json({ success: false, message: '缺少操作类型' });
+            }
+            
+            const acc = this.accounts.get(accountId);
+            if (!acc || acc.state.status !== 'running') {
+                return res.status(400).json({ success: false, message: '账号未运行' });
+            }
+            
+            try {
+                const result = await new Promise((resolve, reject) => {
+                    const callId = Date.now();
+                    
+                    const handleResponse = (msg) => {
+                        if (!msg || msg.type !== 'api_response' || msg.id !== callId) return;
+                        
+                        if (acc && acc.process) {
+                            acc.process.removeListener('message', handleResponse);
+                        }
+                        
+                        if (msg.error) {
+                            reject(new Error(msg.error));
+                        } else {
+                            resolve(msg.result);
+                        }
+                    };
+                    
+                    acc.process.on('message', handleResponse);
+                    
+                    acc.process.send({
+                        type: 'api_call',
+                        id: callId,
+                        method: 'operateFriend',
+                        args: [friendGid, op]
+                    });
+                    
+                    setTimeout(() => {
+                        if (acc && acc.process) {
+                            acc.process.removeListener('message', handleResponse);
+                        }
+                        reject(new Error('超时'));
+                    }, 10000);
+                });
+                
+                res.json({ success: true, data: result });
+            } catch (e) {
+                res.status(500).json({ success: false, message: e.message });
+            }
+        });
+
         // 获取日志
         this.app.get('/api/accounts/:id/logs', (req, res) => {
             const acc = this.accounts.get(req.params.id);
@@ -757,6 +1100,38 @@ class AccountManager {
             }
         });
 
+        // 获取商店种子列表（用于优先种植配置）
+        this.app.get('/api/farm/seeds', (req, res) => {
+            const fs = require('fs');
+            const path = require('path');
+            try {
+                const plantPath = path.join(__dirname, 'gameConfig', 'Plant.json');
+                const plantData = JSON.parse(fs.readFileSync(plantPath, 'utf8'));
+                
+                const seeds = [];
+                const seen = new Set();
+                for (const plant of plantData) {
+                    if (!plant.seed_id || seen.has(plant.seed_id)) continue;
+                    seen.add(plant.seed_id);
+                    
+                    const seedId = plant.seed_id;
+                    if (seedId >= 20000 && seedId < 30000) {
+                        seeds.push({
+                            seedId: seedId,
+                            name: plant.name || `种子${seedId}`,
+                            requiredLevel: plant.land_level_need || 1,
+                            price: plant.sell_price || 0,
+                        });
+                    }
+                }
+                
+                seeds.sort((a, b) => a.requiredLevel - b.requiredLevel);
+                res.json({ success: true, data: seeds });
+            } catch (e) {
+                res.status(500).json({ success: false, message: e.message });
+            }
+        });
+
         // 获取所有植物名称列表
         this.app.get('/api/plants', (req, res) => {
             const fs = require('fs');
@@ -768,6 +1143,22 @@ class AccountManager {
                 res.json({ plants: plantNames });
             } catch (e) {
                 res.status(500).json({ error: e.message });
+            }
+        });
+        
+        // 数据分析 - 作物效率分析
+        this.app.get('/api/analytics', (req, res) => {
+            const sort = req.query.sort || 'exp';
+            
+            if (!getPlantRankings) {
+                return res.status(500).json({ error: '数据分析模块未加载' });
+            }
+            
+            try {
+                const data = getPlantRankings(sort);
+                res.json({ ok: true, data });
+            } catch (e) {
+                res.status(500).json({ ok: false, error: e.message });
             }
         });
 
@@ -794,7 +1185,9 @@ class AccountManager {
                     const handleResponse = (msg) => {
                         if (!msg || msg.type !== 'api_response' || msg.id !== callId) return;
                         
-                        acc.process.removeListener('message', handleResponse);
+                        if (acc && acc.process) {
+                            acc.process.removeListener('message', handleResponse);
+                        }
                         
                         if (msg.error) {
                             reject(new Error(msg.error));
@@ -813,9 +1206,68 @@ class AccountManager {
                     });
                     
                     setTimeout(() => {
-                        acc.process.removeListener('message', handleResponse);
+                        if (acc && acc.process) {
+                            acc.process.removeListener('message', handleResponse);
+                        }
                         reject(new Error('超时'));
                     }, 10000);
+                });
+                
+                res.json({ ok: true, data: result });
+            } catch (e) {
+                res.status(500).json({ ok: false, error: e.message });
+            }
+        });
+        
+        // 背包种子列表
+        this.app.get('/api/bag/seeds', async (req, res) => {
+            const accountId = req.query.accountId || req.headers['x-account-id'];
+            if (!accountId) {
+                return res.status(400).json({ ok: false, error: '缺少账号ID' });
+            }
+            
+            const acc = this.accounts.get(accountId);
+            if (!acc) {
+                return res.status(404).json({ ok: false, error: '账号不存在' });
+            }
+            
+            if (acc.state.status !== 'running' || !acc.process) {
+                return res.json({ ok: true, data: [] });
+            }
+            
+            try {
+                const result = await new Promise((resolve, reject) => {
+                    const callId = Date.now();
+                    
+                    const handleResponse = (msg) => {
+                        if (!msg || msg.type !== 'api_response' || msg.id !== callId) return;
+                        
+                        if (acc && acc.process) {
+                            acc.process.removeListener('message', handleResponse);
+                        }
+                        
+                        if (msg.error) {
+                            reject(new Error(msg.error));
+                        } else {
+                            resolve(msg.result);
+                        }
+                    };
+                    
+                    acc.process.on('message', handleResponse);
+                    
+                    acc.process.send({
+                        type: 'api_call',
+                        id: callId,
+                        method: 'getBagSeeds',
+                        args: []
+                    });
+                    
+                    setTimeout(() => {
+                        if (acc && acc.process) {
+                            acc.process.removeListener('message', handleResponse);
+                        }
+                        resolve([]);
+                    }, 5000);
                 });
                 
                 res.json({ ok: true, data: result });

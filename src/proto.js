@@ -102,6 +102,8 @@ async function loadProto() {
     types.GetAllFriendsReply = root.lookupType('gamepb.friendpb.GetAllReply');
     types.SyncAllFriendsRequest = root.lookupType('gamepb.friendpb.SyncAllRequest');
     types.SyncAllFriendsReply = root.lookupType('gamepb.friendpb.SyncAllReply');
+    types.GetGameFriendsRequest = root.lookupType('gamepb.friendpb.GetGameFriendsRequest');
+    types.GetGameFriendsReply = root.lookupType('gamepb.friendpb.GetGameFriendsReply');
     types.GetApplicationsRequest = root.lookupType('gamepb.friendpb.GetApplicationsRequest');
     types.GetApplicationsReply = root.lookupType('gamepb.friendpb.GetApplicationsReply');
     types.AcceptFriendsRequest = root.lookupType('gamepb.friendpb.AcceptFriendsRequest');
@@ -138,6 +140,7 @@ async function loadProto() {
         path.join(protoDir, 'emailpb.proto'),
         path.join(protoDir, 'illustratedpb.proto'),
         path.join(protoDir, 'qqvippb.proto'),
+        path.join(protoDir, 'interactpb.proto'),
     ], { keepCase: true });
 
     // 分享奖励
@@ -169,6 +172,9 @@ async function loadProto() {
     types.ClaimDailyGiftReply = extraRoot.lookupType('gamepb.qqvippb.ClaimDailyGiftReply');
 
     // Proto 加载完成
+    // 访客记录
+    types.InteractRecordsRequest = extraRoot.lookupType('gamepb.interactpb.InteractRecordsRequest');
+    types.InteractRecordsReply = extraRoot.lookupType('gamepb.interactpb.InteractRecordsReply');
 }
 
 function getRoot() {

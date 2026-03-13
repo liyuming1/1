@@ -20,6 +20,7 @@ let ws = null;
 let clientSeq = 1;
 let serverSeq = 0;
 let heartbeatTimer = null;
+let statusSyncTimer = null;
 let pendingCallbacks = new Map();
 
 // ============ 用户状态 (登录后设置) ============
@@ -30,6 +31,7 @@ const userState = {
     gold: 0,
     exp: 0,
     voucher: 0,  // 点券
+    beans: 0,    // 金豆豆
 };
 
 function getUserState() { return userState; }
@@ -57,7 +59,6 @@ async function encodeMsg(serviceName, methodName, bodyBytes) {
 
 async function sendMsg(serviceName, methodName, bodyBytes, callback) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-        log('WS', '连接未打开');
         return false;
     }
     const seq = clientSeq;
@@ -72,7 +73,7 @@ async function sendMsgAsync(serviceName, methodName, bodyBytes, timeout = 10000)
     return new Promise(async (resolve, reject) => {
         // 检查连接状态
         if (!ws || ws.readyState !== WebSocket.OPEN) {
-            reject(new Error(`连接未打开: ${methodName}`));
+            reject(new Error('连接未打开'));
             return;
         }
         
@@ -250,6 +251,7 @@ function handleNotify(msg) {
         // 物品变化通知 (经验/金币等) - 仅更新状态栏
         // 金币: id=1 或 id=1001 (GodItemId)
         // 经验: id=1101 (ExpItemId) 或 id=2
+        // 点券: id=1002 (DiamondItemId)
         if (type.includes('ItemNotify')) {
             try {
                 const notify = types.ItemNotify.decode(eventBody);
@@ -266,6 +268,8 @@ function handleNotify(msg) {
                     } else if (id === 1 || id === 1001) {
                         userState.gold = count;
                         updateStatusGold(count);
+                    } else if (id === 1002) {
+                        userState.voucher = count;
                     }
                 }
             } catch (e) { }
@@ -390,7 +394,7 @@ function sendLogin(onLoginSuccess) {
         },
     })).finish();
 
-    sendMsg('gamepb.userpb.UserService', 'Login', body, (err, bodyBytes, meta) => {
+    sendMsg('gamepb.userpb.UserService', 'Login', body, async (err, bodyBytes, meta) => {
         if (err) {
             log('登录', `失败: ${err.message}`);
             return;
@@ -420,6 +424,8 @@ function sendLogin(onLoginSuccess) {
                     level: userState.level,
                     gold: userState.gold,
                     exp: userState.exp,
+                    voucher: userState.voucher,
+                    beans: userState.beans,
                     avatarUrl: userState.avatarUrl,
                     openId: userState.openId,
                 });
@@ -439,11 +445,55 @@ function sendLogin(onLoginSuccess) {
             }
 
             startHeartbeat();
+            
+            // 登录后主动拉一次背包，初始化点券(ID:1002)和金豆豆(ID:1005)数量
+            try {
+                const { getBag, getBagItems } = require('./warehouse');
+                const bagReply = await getBag();
+                const items = getBagItems(bagReply);
+                for (const it of (items || [])) {
+                    const id = toNum(it.id);
+                    const count = toNum(it.count);
+                    if (id === 1002) {
+                        userState.voucher = Math.max(0, count);
+                    } else if (id === 1005) {
+                        userState.beans = Math.max(0, count);
+                    }
+                }
+            } catch (e) {}
+            
+            startStatusSync();
             if (onLoginSuccess) onLoginSuccess();
         } catch (e) {
             log('登录', `解码失败: ${e.message}`);
         }
     });
+}
+
+// ============ 状态定时同步 ============
+
+function startStatusSync() {
+    if (statusSyncTimer) return;
+    statusSyncTimer = setInterval(() => {
+        if (!userState.gid) return;
+        reporter.reportStatus({
+            name: userState.name,
+            level: userState.level,
+            gold: userState.gold,
+            exp: userState.exp,
+            voucher: userState.voucher,
+            beans: userState.beans,
+            avatarUrl: userState.avatarUrl,
+            openId: userState.openId,
+        });
+    }, 3000);
+}
+
+function stopStatusSync() {
+    if (statusSyncTimer) {
+        clearInterval(statusSyncTimer);
+        statusSyncTimer = null;
+    }
 }
 
 // ============ 心跳 ============
@@ -523,6 +573,7 @@ async function connect(code, onLoginSuccess) {
 
 function cleanup() {
     if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    stopStatusSync();
     pendingCallbacks.clear();
 }
 

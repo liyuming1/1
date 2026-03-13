@@ -50,6 +50,7 @@ QQ经典农场 挂机脚本
   --wx                使用微信登录 (默认为QQ小程序)
   --interval          自己农场巡查完成后等待秒数, 默认10秒, 最低10秒
   --friend-interval   好友巡查完成后等待秒数, 默认1秒, 最低1秒
+  --import-gids       手动导入GID好友列表，用逗号分隔，如: 123456,789012
   --verify            验证proto定义
   --decode            解码PB数据 (运行 --decode 无参数查看详细帮助)
 
@@ -81,6 +82,7 @@ function parseArgs(args) {
         accountId: '',
         accountDir: '',
         managerUrl: '',
+        importGids: '',
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -116,6 +118,11 @@ function parseArgs(args) {
         } else if (args[i] === '--manager-url' && args[i + 1]) {
             options.managerUrl = args[++i];
         }
+        if (args[i].startsWith('--import-gids=')) {
+            options.importGids = args[i].split('=')[1];
+        } else if (args[i] === '--import-gids' && args[i + 1]) {
+            options.importGids = args[++i];
+        }
     }
     return options;
 }
@@ -140,8 +147,23 @@ async function main() {
         return;
     }
 
-    // 正常挂机模式
+    // 解析参数
     const options = parseArgs(args);
+
+    // 导入GID模式（可以单独使用，也可以与登录一起使用）
+    if (options.importGids) {
+        const { importFriendGids, getFriendCache } = require('./src/friendCache');
+        const gids = options.importGids.split(/[,，\s]+/).filter(Boolean);
+        const result = importFriendGids(gids);
+        console.log('[导入GID]', result.message);
+        console.log('[好友缓存] 当前共有', result.total, '个好友');
+        
+        // 如果没有提供登录凭证，导入后退出
+        if (!options.code) {
+            console.log('[提示] 导入完成，如需运行挂机请提供 --code 参数');
+            return;
+        }
+    }
 
     // QQ 平台支持扫码登录: 显式 --qr，或未传 --code 时自动触发
     if (!options.code && CONFIG.platform === 'qq' && (options.qrLogin || !args.includes('--code'))) {
@@ -173,6 +195,18 @@ async function main() {
     initStatusBar();
     setStatusPlatform(CONFIG.platform);
 
+    // 初始化好友缓存 - 先设置账号ID，再初始化
+    const { watchFriendCache, setAccountId } = require('./src/friendCache');
+    // 解析账号ID
+    const accountIdArg = process.argv.find(arg => arg.startsWith('--account-id='));
+    if (accountIdArg) {
+        const accountId = accountIdArg.split('=')[1];
+        if (accountId) {
+            setAccountId(accountId);
+        }
+    }
+    watchFriendCache();
+
     // ============ IPC 消息处理 ============
     // 注册可导出的函数（在connect之前定义，确保随时可以处理IPC消息）
     const ipcHandlers = {
@@ -184,6 +218,10 @@ async function main() {
             const { getBagDetail } = require('./src/warehouse');
             return await getBagDetail();
         },
+        getBagSeeds: async () => {
+            const { getBagSeeds } = require('./src/warehouse');
+            return await getBagSeeds();
+        },
         getTaskInfo: async () => {
             const { getTaskInfo } = require('./src/task');
             return await getTaskInfo();
@@ -193,8 +231,20 @@ async function main() {
             return await getAllLands();
         },
         getFriendsList: async () => {
-            const { getAllFriends } = require('./src/friend');
-            return await getAllFriends();
+            const { getFriendsList } = require('./src/friend');
+            return await getFriendsList();
+        },
+        getInteractRecords: async () => {
+            const { getInteractRecords } = require('./src/interact');
+            return await getInteractRecords();
+        },
+        getFriendLands: async (gid) => {
+            const { getFriendLands } = require('./src/friend');
+            return await getFriendLands(gid);
+        },
+        operateFriend: async (gid, op) => {
+            const { operateFriend } = require('./src/friend');
+            return await operateFriend(gid, op);
         }
     };
 

@@ -224,10 +224,14 @@ function getPlantGrowTime(plantId) {
  */
 function formatGrowTime(seconds) {
     if (seconds < 60) return `${seconds}秒`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}分钟`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}分${seconds % 60}秒`;
     const hours = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
-    return mins > 0 ? `${hours}小时${mins}分` : `${hours}小时`;
+    return mins > 0 ? `${hours}时${mins}分` : `${hours}时`;
+}
+
+function getAllPlants() {
+    return Array.from(plantMap.values());
 }
 
 /**
@@ -266,6 +270,10 @@ function getPlantByFruitId(fruitId) {
 function getItemInfoById(itemId) {
     const id = Number(itemId) || 0;
     return itemInfoMap.get(id) || null;
+}
+
+function getItemById(itemId) {
+    return getItemInfoById(itemId);
 }
 
 /**
@@ -325,6 +333,24 @@ function getItemImageById(itemId) {
     return '';
 }
 
+function getSeedPrice(seedId) {
+    const id = Number(seedId) || 0;
+    const item = itemInfoMap.get(id);
+    if (item) {
+        return Number(item.price) || 0;
+    }
+    const plant = seedToPlant.get(id);
+    if (plant && plant.price) {
+        return Number(plant.price) || 0;
+    }
+    return 0;
+}
+
+function getFruitPrice(fruitId) {
+    const item = itemInfoMap.get(Number(fruitId) || 0);
+    return item ? (Number(item.price) || 0) : 0;
+}
+
 // 启动时加载配置
 loadConfigs();
 
@@ -334,6 +360,7 @@ module.exports = {
     getLevelExpTable,
     getLevelExpProgress,
     // 植物配置
+    getAllPlants,
     getPlantById,
     getPlantBySeedId,
     getPlantName,
@@ -345,8 +372,12 @@ module.exports = {
     // 果实配置
     getFruitName,
     getPlantByFruitId,
+    // 价格
+    getSeedPrice,
+    getFruitPrice,
     // 物品配置
     getItemName,
+    getItemById,
     getItemInfoById,
     getItemImageById
 };

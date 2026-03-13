@@ -7,7 +7,7 @@ const { CONFIG } = require('./config');
 const { types } = require('./proto');
 const { sendMsgAsync } = require('./network');
 const { toLong, toNum, log, logWarn } = require('./utils');
-const { getFruitName, getItemName, getPlantByFruitId, getPlantBySeedId, getItemImageById, getItemInfoById } = require('./gameConfig');
+const { getFruitName, getItemName, getPlantByFruitId, getPlantBySeedId, getItemImageById, getItemInfoById, getItemById } = require('./gameConfig');
 const seedShopData = require('../tools/seed-shop-merged-export.json');
 const reporter = require('./reporter');
 
@@ -260,7 +260,8 @@ async function getBagDetail() {
         const count = toNum(it.count);
         if (id <= 0 || count <= 0) continue;
         
-        let name = '';
+        const info = getItemById(id) || null;
+        let name = info && info.name ? String(info.name) : '';
         let category = 'item';
         
         if (id === 1 || id === 1001) {
@@ -273,21 +274,20 @@ async function getBagDetail() {
             name = '经验';
             category = 'exp';
         } else if (getPlantByFruitId(id)) {
-            name = `${getFruitName(id)}果实`;
+            if (!name) name = `${getFruitName(id)}果实`;
             category = 'fruit';
         } else if (getPlantBySeedId(id)) {
             const p = getPlantBySeedId(id);
-            name = p ? `${p.name}种子` : `种子${id}`;
+            if (!name) name = `${p && p.name ? p.name : '未知'}种子`;
             category = 'seed';
-        } else {
-            name = getItemName(id);
         }
         
         if (!name) name = `物品${id}`;
         
         const image = getItemImageById(id);
-        const info = getItemInfoById(id);
         const interactionType = info && info.interaction_type ? String(info.interaction_type) : '';
+        const priceId = info ? (Number(info.price_id) || 0) : 0;
+        const priceUnit = priceId === 1005 ? '金豆豆' : priceId === 1002 ? '点券' : '金';
         
         if (!merged.has(id)) {
             merged.set(id, {
@@ -298,7 +298,9 @@ async function getBagDetail() {
                 image,
                 category,
                 itemType: info ? (Number(info.type) || 0) : 0,
+                priceId,
                 price: info ? (Number(info.price) || 0) : 0,
+                priceUnit,
                 level: info ? (Number(info.level) || 0) : 0,
                 interactionType,
                 hoursText: '',
@@ -318,12 +320,59 @@ async function getBagDetail() {
         return row;
     });
     
+    // 按类型优先级排序 (项目1逻辑)
     items.sort((a, b) => {
-        if (b.count !== a.count) return b.count - a.count;
-        return a.id - b.id;
+        const typePriority = new Map([
+            [17, 0],  // 种子
+            [5, 1],   // 徽章
+            [6, 2],   // 装饰
+        ]);
+        const taRaw = Number(a.itemType || 0);
+        const tbRaw = Number(b.itemType || 0);
+        const ta = typePriority.has(taRaw) ? typePriority.get(taRaw) : (taRaw > 0 ? (1000 + taRaw) : Number.MAX_SAFE_INTEGER);
+        const tb = typePriority.has(tbRaw) ? typePriority.get(tbRaw) : (tbRaw > 0 ? (1000 + tbRaw) : Number.MAX_SAFE_INTEGER);
+        if (ta !== tb) return ta - tb;
+
+        const ca = Number(a.count || 0);
+        const cb = Number(b.count || 0);
+        if (cb !== ca) return cb - ca;
+        
+        return Number(a.id || 0) - Number(b.id || 0);
     });
     
     return { totalKinds: items.length, items };
+}
+
+async function getBagSeeds() {
+    const { getPlantBySeedId, getItemImageById } = require('./gameConfig');
+    
+    const bagReply = await getBag();
+    const rawItems = getBagItems(bagReply);
+    
+    const seeds = [];
+    for (const it of (rawItems || [])) {
+        const id = toNum(it.id);
+        const count = toNum(it.count);
+        
+        if (id <= 0 || count <= 0) continue;
+        
+        // 检查是否是种子 (seed_id 在 20000-29999 范围内)
+        if (id >= 20000 && id < 30000) {
+            const plant = getPlantBySeedId(id);
+            if (plant) {
+                seeds.push({
+                    seedId: id,
+                    name: plant.name || `种子${id}`,
+                    count: count,
+                    image: getItemImageById(id),
+                    plantSize: plant.size || 1,
+                    requiredLevel: plant.unlock_level || 1,
+                });
+            }
+        }
+    }
+    
+    return seeds;
 }
 
 module.exports = {
@@ -333,6 +382,7 @@ module.exports = {
     debugSellFruits,
     getBagItems,
     getBagDetail,
+    getBagSeeds,
     startSellLoop,
     stopSellLoop,
     buyFertilizer,

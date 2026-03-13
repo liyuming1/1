@@ -179,6 +179,53 @@ function applyConfig(newConfig) {
             console.log(`[Config] 热更新: autoFertilizeOrganic=${newConfig.autoFertilizeOrganic}`);
         }
     }
+    
+    // 种植策略
+    if (newConfig.plantingStrategy !== undefined) {
+        if (CONFIG.plantingStrategy !== newConfig.plantingStrategy) {
+            CONFIG.plantingStrategy = newConfig.plantingStrategy;
+            changed = true;
+            console.log(`[Config] 热更新: plantingStrategy=${newConfig.plantingStrategy}`);
+        }
+    }
+    
+    // 优先种子ID
+    if (newConfig.preferredSeedId !== undefined) {
+        if (CONFIG.preferredSeedId !== newConfig.preferredSeedId) {
+            CONFIG.preferredSeedId = newConfig.preferredSeedId;
+            changed = true;
+            console.log(`[Config] 热更新: preferredSeedId=${newConfig.preferredSeedId}`);
+        }
+    }
+    
+    // 背包种子优先级
+    if (newConfig.bagSeedPriority !== undefined) {
+        const newPriority = Array.isArray(newConfig.bagSeedPriority) ? newConfig.bagSeedPriority : [];
+        if (JSON.stringify(CONFIG.bagSeedPriority) !== JSON.stringify(newPriority)) {
+            CONFIG.bagSeedPriority = newPriority;
+            changed = true;
+            console.log(`[Config] 热更新: bagSeedPriority=${JSON.stringify(newPriority)}`);
+        }
+    }
+    
+    // 施肥范围
+    if (newConfig.fertilizerLandTypes !== undefined) {
+        const newTypes = Array.isArray(newConfig.fertilizerLandTypes) ? newConfig.fertilizerLandTypes : ['normal', 'advanced', 'luxury', 'legendary'];
+        if (JSON.stringify(CONFIG.fertilizerLandTypes) !== JSON.stringify(newTypes)) {
+            CONFIG.fertilizerLandTypes = newTypes;
+            changed = true;
+            console.log(`[Config] 热更新: fertilizerLandTypes=${JSON.stringify(newConfig.fertilizerLandTypes)}`);
+        }
+    }
+    
+    // 多季补肥
+    if (newConfig.fertilizerMultiSeason !== undefined) {
+        if (CONFIG.fertilizerMultiSeason !== newConfig.fertilizerMultiSeason) {
+            CONFIG.fertilizerMultiSeason = newConfig.fertilizerMultiSeason;
+            changed = true;
+            console.log(`[Config] 热更新: fertilizerMultiSeason=${newConfig.fertilizerMultiSeason}`);
+        }
+    }
 
     if (newConfig.forceLowestLevelCrop !== undefined) {
         if (CONFIG.forceLowestLevelCrop !== newConfig.forceLowestLevelCrop) {

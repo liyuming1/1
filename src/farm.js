@@ -7,10 +7,11 @@ const { CONFIG, PlantPhase, PHASE_NAMES, getPlantPhaseNames, getPlantPhaseDurati
 const { types } = require('./proto');
 const { sendMsgAsync, getUserState, networkEvents } = require('./network');
 const { toLong, toNum, getServerTimeSec, toTimeSec, log, logWarn, sleep } = require('./utils');
-const { getPlantNameBySeedId, getPlantName, getPlantExp, formatGrowTime, getPlantGrowTime, getItemName, getPlantById, getItemImageById } = require('./gameConfig');
-const { getPlantingRecommendation, getExpRanking } = require('../tools/calc-exp-yield');
+const { getPlantNameBySeedId, getPlantName, getPlantExp, formatGrowTime, getPlantGrowTime, getItemName, getPlantById, getPlantBySeedId, getItemImageById } = require('./gameConfig');
+const analytics = require('./analytics');
 const reporter = require('./reporter');
 const warehouse = require('./warehouse');
+const { getBagSeeds } = require('./warehouse');
 
 // ============ 内部状态 ============
 let isCheckingFarm = false;
@@ -47,6 +48,71 @@ function getLandStatus(land) {
     if ((land.plant.weed_owners?.length || 0) > 0) return 'needsWeed';
     if ((land.plant.insect_owners?.length || 0) > 0) return 'needsInsect';
     return 'growing';
+}
+
+// ============ 合种相关函数 ============
+
+function getSlaveLandIds(land) {
+    const ids = Array.isArray(land?.slave_land_ids) ? land.slave_land_ids : [];
+    return [...new Set(ids.map(id => toNum(id)).filter(Boolean))];
+}
+
+function getLinkedMasterLand(land, landsMap) {
+    const landId = toNum(land?.id);
+    const masterLandId = toNum(land?.master_land_id);
+    if (!masterLandId || masterLandId === landId) return null;
+    
+    const masterLand = landsMap.get(masterLandId);
+    if (!masterLand) return null;
+    
+    const slaveIds = getSlaveLandIds(masterLand);
+    if (slaveIds.length > 0 && !slaveIds.includes(landId)) return null;
+    
+    return masterLand;
+}
+
+function hasPlantData(land) {
+    const plant = land?.plant;
+    return !!(plant && Array.isArray(plant.phases) && plant.phases.length > 0);
+}
+
+function getDisplayLandContext(land, landsMap) {
+    if (!landsMap) {
+        landsMap = new Map();
+    }
+    
+    const masterLand = getLinkedMasterLand(land, landsMap);
+    if (masterLand && hasPlantData(masterLand)) {
+        const occupiedLandIds = [toNum(masterLand.id), ...getSlaveLandIds(masterLand)].filter(Boolean);
+        return {
+            sourceLand: masterLand,
+            occupiedByMaster: true,
+            masterLandId: toNum(masterLand.id),
+            occupiedLandIds: occupiedLandIds.length > 0 ? occupiedLandIds : [toNum(masterLand.id)].filter(Boolean),
+        };
+    }
+    
+    const selfId = toNum(land?.id);
+    return {
+        sourceLand: land,
+        occupiedByMaster: false,
+        masterLandId: selfId,
+        occupiedLandIds: [selfId].filter(Boolean),
+    };
+}
+
+function isOccupiedSlaveLand(land, landsMap) {
+    return getDisplayLandContext(land, landsMap).occupiedByMaster;
+}
+
+function buildLandMap(lands) {
+    const map = new Map();
+    const list = Array.isArray(lands) ? lands : [];
+    for (const land of list) {
+        const id = toNum(land && land.id);
+        if (id > 0) map.set(id, land);
+    }
+    return map;
 }
 
 function serializeLands(landsReply) {
@@ -370,6 +436,26 @@ async function plantSeeds(seedId, landIds) {
     return successCount;
 }
 
+// 按优先级排序背包种子
+function sortBagSeedsByPriority(bagSeeds, priority) {
+    if (!priority || priority.length === 0) {
+        return [...bagSeeds].sort((a, b) => b.requiredLevel - a.requiredLevel);
+    }
+    
+    const priorityMap = new Map();
+    priority.forEach((seedId, index) => {
+        priorityMap.set(seedId, index);
+    });
+    
+    return [...bagSeeds].sort((a, b) => {
+        const pa = priorityMap.has(a.seedId) ? priorityMap.get(a.seedId) : Number.MAX_SAFE_INTEGER;
+        const pb = priorityMap.has(b.seedId) ? priorityMap.get(b.seedId) : Number.MAX_SAFE_INTEGER;
+        if (pa !== pb) return pa - pb;
+        // 优先级相同时按等级降序
+        return b.requiredLevel - a.requiredLevel;
+    });
+}
+
 async function findBestSeed(landsCount) {
     const SEED_SHOP_ID = 2;
     const shopReply = await getShopInfo(SEED_SHOP_ID);
@@ -420,29 +506,177 @@ async function findBestSeed(landsCount) {
         return available[0];
     }
 
-    const lands = landsCount == null ? 18 : landsCount;
-    const topN = 5;
+    // 种植策略选择
+    const strategy = CONFIG.plantingStrategy || 'preferred';
+    log('种植', `当前种植策略: ${strategy}`);
 
-    try {
-        const selectedSeed = CONFIG.selectedSeed;
-        
-        if (selectedSeed) {
-            const seedName = selectedSeed.trim();
-            const hit = available.find(s => getPlantNameBySeedId(s.seedId) === seedName);
-            if (hit) {
-                log('商店', `种子选择: ${seedName}`);
-                return hit;
+    // 策略1: 优先种植指定种子
+    if (strategy === 'preferred' && CONFIG.preferredSeedId > 0) {
+        const hit = available.find(s => s.seedId === CONFIG.preferredSeedId);
+        if (hit) {
+            // 跳过2x2及以上大尺寸种子
+            const plantInfo = getPlantBySeedId(hit.seedId);
+            if (plantInfo && plantInfo.size > 1) {
+                log('商店', `优先种子 ${getPlantNameBySeedId(hit.seedId)} 是 ${plantInfo.size}x${plantInfo.size} 种子，跳过`);
             } else {
-                logWarn('商店', `种子${seedName}不可用，使用排行榜推荐`);
+                log('商店', `优先种子: ${getPlantNameBySeedId(hit.seedId)}`);
+                return hit;
             }
         }
-        
-        const rec = getExpRanking(state.level, lands, topN);
-        
-        const rankedSeedIds = rec.topNormalFert.map(x => x.seedId);
-        for (const seedId of rankedSeedIds) {
-            const hit = available.find(x => x.seedId === seedId);
-            if (hit) return hit;
+    }
+
+    // 策略2: 背包种子优先
+    let currentStrategy = strategy;
+    if (strategy === 'bag_priority') {
+        try {
+            const bagSeeds = await getBagSeeds();
+            if (bagSeeds && bagSeeds.length > 0) {
+                // 按优先级排序
+                const priority = CONFIG.bagSeedPriority || [];
+                const sortedSeeds = sortBagSeedsByPriority(bagSeeds, priority);
+                
+                // 找到第一个可用的种子（跳过2x2及以上）
+                for (const seed of sortedSeeds) {
+                    const hit = available.find(s => s.seedId === seed.seedId);
+                    if (hit) {
+                        if (seed.plantSize > 1) {
+                            log('商店', `跳过 ${seed.name} 是 ${seed.plantSize}x${seed.plantSize} 种子`);
+                            continue;
+                        }
+                        log('商店', `背包种子优先: ${seed.name}`);
+                        return hit;
+                    }
+                }
+                log('商店', '背包种子无可用，切换到最高等级策略');
+                // 背包种子用完后切换到level策略
+                currentStrategy = 'level';
+            } else {
+                log('商店', '背包无种子，切换到最高等级策略');
+                currentStrategy = 'level';
+            }
+        } catch (e) {
+            logWarn('商店', `获取背包种子失败: ${e.message}，切换到最高等级策略`);
+            currentStrategy = 'level';
+        }
+    }
+
+    const lands = landsCount == null ? 18 : landsCount;
+    const topN = 10;
+
+    // 策略3: 最高等级 (level)
+    if (currentStrategy === 'level') {
+        // 跳过2x2及以上大尺寸种子
+        const sortedByLevel = [...available].sort((a, b) => b.requiredLevel - a.requiredLevel);
+        for (const seed of sortedByLevel) {
+            const plantInfo = getPlantBySeedId(seed.seedId);
+            if (plantInfo && plantInfo.size > 1) {
+                continue;
+            }
+            log('商店', `最高等级: ${getPlantNameBySeedId(seed.seedId)} Lv${seed.requiredLevel}`);
+            return seed;
+        }
+        if (sortedByLevel.length > 0) {
+            return sortedByLevel[0];
+        }
+    }
+
+    // 策略4: 经验优先 (max_exp)
+    if (currentStrategy === 'max_exp') {
+        try {
+            const rankings = analytics.getPlantRankings('exp');
+            for (const plant of rankings) {
+                const hit = available.find(x => x.seedId === plant.seedId);
+                if (hit) {
+                    if (plant.level && plant.level > state.level) {
+                        continue;
+                    }
+                    const plantInfo = getPlantBySeedId(hit.seedId);
+                    if (plantInfo && plantInfo.size > 1) {
+                        continue;
+                    }
+                    log('商店', `经验优先: ${getPlantNameBySeedId(hit.seedId)}`);
+                    return hit;
+                }
+            }
+        } catch (e) {
+            logWarn('商店', `经验排行获取失败: ${e.message}`);
+        }
+    }
+
+    // 策略5: 普肥经验优先 (max_fert_exp)
+    if (currentStrategy === 'max_fert_exp') {
+        try {
+            const analytics = require('./analytics');
+            const rankings = analytics.getPlantRankings('fert');
+            for (const plant of rankings) {
+                const hit = available.find(x => x.seedId === plant.seedId);
+                if (hit) {
+                    const plantInfo = getPlantBySeedId(hit.seedId);
+                    if (plantInfo && plantInfo.size > 1) {
+                        continue;
+                    }
+                    log('商店', `普肥经验优先: ${getPlantNameBySeedId(hit.seedId)} (${plant.expPerHour}/时)`);
+                    return hit;
+                }
+            }
+        } catch (e) {
+            logWarn('商店', `普肥经验排行获取失败: ${e.message}`);
+        }
+    }
+
+    // 策略6: 利润优先 (max_profit)
+    if (currentStrategy === 'max_profit') {
+        try {
+            const analytics = require('./analytics');
+            const rankings = analytics.getPlantRankings('profit');
+            for (const plant of rankings) {
+                const hit = available.find(x => x.seedId === plant.seedId);
+                if (hit) {
+                    const plantInfo = getPlantBySeedId(hit.seedId);
+                    if (plantInfo && plantInfo.size > 1) {
+                        continue;
+                    }
+                    log('商店', `利润优先: ${getPlantNameBySeedId(hit.seedId)} (${plant.profitPerHour}/时)`);
+                    return hit;
+                }
+            }
+        } catch (e) {
+            logWarn('商店', `利润排行获取失败: ${e.message}`);
+        }
+    }
+
+    // 策略7: 普肥利润优先 (max_fert_profit)
+    if (currentStrategy === 'max_fert_profit') {
+        try {
+            const analytics = require('./analytics');
+            const rankings = analytics.getPlantRankings('fert_profit');
+            for (const plant of rankings) {
+                const hit = available.find(x => x.seedId === plant.seedId);
+                if (hit) {
+                    const plantInfo = getPlantBySeedId(hit.seedId);
+                    if (plantInfo && plantInfo.size > 1) {
+                        continue;
+                    }
+                    log('商店', `普肥利润优先: ${getPlantNameBySeedId(hit.seedId)} (${plant.profitPerHour}/时)`);
+                    return hit;
+                }
+            }
+        } catch (e) {
+            logWarn('商店', `普肥利润排行获取失败: ${e.message}`);
+        }
+    }
+    
+    // 默认使用经验排行
+    try {
+        const rankings = analytics.getPlantRankings('exp');
+        for (const plant of rankings) {
+            const hit = available.find(x => x.seedId === plant.seedId);
+            if (hit) {
+                if (plant.level && plant.level > state.level) {
+                    continue;
+                }
+                return hit;
+            }
         }
     } catch (e) {
         logWarn('商店', `经验效率推荐失败，使用兜底策略: ${e.message}`);
@@ -544,23 +778,122 @@ async function autoPlantEmptyLands(deadLandIds, emptyLandIds, unlockedLandCount)
         const useNormal = CONFIG.autoFertilizeNormal;
         const useOrganic = CONFIG.autoFertilizeOrganic;
         
+        // 施肥范围过滤（根据配置的土地类型）
+        const allowedLandTypes = CONFIG.fertilizerLandTypes || ['gold', 'black', 'red', 'normal'];
+        
+        // 获取土地类型并过滤
+        const lands = getLandStatus();
+        const landTypeMap = new Map();
+        for (const land of lands) {
+            if (land && land.id && land.level) {
+                const landType = getLandTypeByLevel(land.level);
+                landTypeMap.set(land.id, landType);
+            }
+        }
+        
+        // 根据土地类型过滤
+        const filteredLands = plantedLands.filter(landId => {
+            const landType = landTypeMap.get(landId);
+            return landType && allowedLandTypes.includes(landType);
+        });
+        
+        const targetLands = filteredLands.length > 0 ? filteredLands : plantedLands;
+        
+        if (allowedLandTypes.length > 0 && filteredLands.length === 0 && plantedLands.length > 0) {
+            log('施肥', `施肥范围过滤：无符合条件的土地 (${allowedLandTypes.join(', ')})`);
+        }
+        
         if (useNormal) {
-            const normalCount = await fertilize(plantedLands, NORMAL_FERTILIZER_ID);
+            const normalCount = await fertilize(targetLands, NORMAL_FERTILIZER_ID);
             if (normalCount > 0) {
-                log('施肥', `普通肥：${normalCount}/${plantedLands.length}`);
+                log('施肥', `普通肥：${normalCount}/${targetLands.length}`);
             }
         }
         
         if (useOrganic) {
-            const organicCount = await fertilize(plantedLands, ORGANIC_FERTILIZER_ID);
+            const organicCount = await fertilize(targetLands, ORGANIC_FERTILIZER_ID);
             if (organicCount > 0) {
-                log('施肥', `有机肥：${organicCount}/${plantedLands.length}`);
+                log('施肥', `有机肥：${organicCount}/${targetLands.length}`);
             }
         }
         
         if (!useNormal && !useOrganic) {
             logWarn('施肥', '未选择任何施肥类型');
         }
+    }
+}
+
+// 根据土地等级获取土地类型
+function getLandTypeByLevel(level) {
+    const lv = Number(level) || 0;
+    if (lv >= 4) return 'gold';     // 金土地
+    if (lv === 3) return 'black';  // 黑土地
+    if (lv === 2) return 'red';    // 红土地
+    return 'normal';                 // 普通土地
+}
+
+// 多季补肥逻辑
+async function autoRefertilizeMultiSeason(landIds) {
+    if (!CONFIG.autoFertilize || !CONFIG.fertilizerMultiSeason) {
+        return;
+    }
+    
+    const useNormal = CONFIG.autoFertilizeNormal;
+    const useOrganic = CONFIG.autoFertilizeOrganic;
+    
+    if (!useNormal && !useOrganic) {
+        return;
+    }
+    
+    // 施肥范围过滤（根据配置的土地类型）
+    const allowedLandTypes = CONFIG.fertilizerLandTypes || ['gold', 'black', 'red', 'normal'];
+    
+    // 获取最新的土地信息
+    const landsReply = await getAllLands();
+    const lands = landsReply.lands || [];
+    
+    // 构建土地类型映射
+    const landTypeMap = new Map();
+    for (const land of lands) {
+        if (land && land.id && land.level) {
+            const landType = getLandTypeByLevel(land.level);
+            landTypeMap.set(land.id, landType);
+        }
+    }
+    
+    let fertilizedCount = 0;
+    
+    for (const landId of landIds) {
+        const land = lands.find(l => l.id === landId);
+        if (!land || !land.plant) continue;
+        
+        // 检查土地类型是否符合施肥范围
+        const landType = landTypeMap.get(landId);
+        if (landType && !allowedLandTypes.includes(landType)) {
+            continue;
+        }
+        
+        // 检查是否是多季作物且不是最后一季
+        const plant = land.plant;
+        const currentSeason = plant.currentSeason || 1;
+        const totalSeason = plant.totalSeason || 1;
+        
+        // 只有多季作物且不是最后一季才需要补肥
+        if (totalSeason > 1 && currentSeason < totalSeason) {
+            if (useNormal) {
+                await fertilize([landId], NORMAL_FERTILIZER_ID);
+                fertilizedCount++;
+            }
+            if (useOrganic) {
+                await fertilize([landId], ORGANIC_FERTILIZER_ID);
+                fertilizedCount++;
+            }
+            log('多季补肥', `土地#${landId} 第${currentSeason}季`);
+        }
+    }
+    
+    if (fertilizedCount > 0) {
+        log('多季补肥', `完成 ${fertilizedCount} 块土地`);
     }
 }
 
@@ -612,6 +945,9 @@ function analyzeLands(lands) {
     const nowSec = getServerTimeSec();
     const debug = false;
 
+    // 构建土地Map用于合种查询
+    const landsMap = buildLandMap(lands);
+
     if (debug) {
         console.log('');
         console.log('========== 首次巡田详细日志 ==========');
@@ -622,6 +958,13 @@ function analyzeLands(lands) {
 
     for (const land of lands) {
         const id = toNum(land.id);
+        
+        // 跳过已占用的副地块
+        if (isOccupiedSlaveLand(land, landsMap)) {
+            if (debug) console.log(`  土地#${id}: 合种副地块，已跳过`);
+            continue;
+        }
+        
         if (!land.unlocked) {
             result.locked.push(id);
             if (debug) console.log(`  土地#${id}: 未解锁`);
@@ -757,28 +1100,30 @@ async function checkFarm() {
         // 执行操作并收集结果
         const actions = [];
 
-        // 一键操作：除草、除虫、浇水并行执行（游戏中是一键完成）
-        const batchOps = [];
-        if (status.needWeed.length > 0) {
-            batchOps.push(weedOut(status.needWeed).then(() => {
-                actions.push(`除草${status.needWeed.length}`);
-                reporter.reportStats({ selfWeed: status.needWeed.length });
-            }).catch(e => logWarn('除草', e.message)));
-        }
-        if (status.needBug.length > 0) {
-            batchOps.push(insecticide(status.needBug).then(() => {
-                actions.push(`除虫${status.needBug.length}`);
-                reporter.reportStats({ selfPest: status.needBug.length });
-            }).catch(e => logWarn('除虫', e.message)));
-        }
-        if (status.needWater.length > 0) {
-            batchOps.push(waterLand(status.needWater).then(() => {
-                actions.push(`浇水${status.needWater.length}`);
-                reporter.reportStats({ selfWater: status.needWater.length });
-            }).catch(e => logWarn('浇水', e.message)));
-        }
-        if (batchOps.length > 0) {
-            await Promise.all(batchOps);
+        // 一键操作：除草、除虫、浇水并行执行（游戏中是一键完成）- 受autoFarm开关控制
+        if (CONFIG.autoFarm) {
+            const batchOps = [];
+            if (status.needWeed.length > 0) {
+                batchOps.push(weedOut(status.needWeed).then(() => {
+                    actions.push(`除草${status.needWeed.length}`);
+                    reporter.reportStats({ selfWeed: status.needWeed.length });
+                }).catch(e => logWarn('除草', e.message)));
+            }
+            if (status.needBug.length > 0) {
+                batchOps.push(insecticide(status.needBug).then(() => {
+                    actions.push(`除虫${status.needBug.length}`);
+                    reporter.reportStats({ selfPest: status.needBug.length });
+                }).catch(e => logWarn('除虫', e.message)));
+            }
+            if (status.needWater.length > 0) {
+                batchOps.push(waterLand(status.needWater).then(() => {
+                    actions.push(`浇水${status.needWater.length}`);
+                    reporter.reportStats({ selfWater: status.needWater.length });
+                }).catch(e => logWarn('浇水', e.message)));
+            }
+            if (batchOps.length > 0) {
+                await Promise.all(batchOps);
+            }
         }
 
         // 收获（一键操作）- 受autoFarm开关控制
@@ -792,6 +1137,29 @@ async function checkFarm() {
                 actions.push(`收获${status.harvestable.length}`);
                 harvestedLandIds = [...status.harvestable];
                 reporter.reportStats({ harvestCount: status.harvestable.length });
+                
+                // 收获后检查多季补肥
+                if (CONFIG.fertilizerMultiSeason && CONFIG.autoFertilize) {
+                    try {
+                        // 收获后需要重新获取土地状态，找到仍在生长的多季作物
+                        const refreshedLands = await getAllLands();
+                        const refreshedStatus = analyzeLands(refreshedLands.lands);
+                        // 多季作物收获后会进入下一季的生长阶段
+                        const multiSeasonLands = refreshedStatus.growing.filter(landId => {
+                            const land = refreshedLands.lands.find(l => l.id === landId);
+                            if (!land || !land.plant) return false;
+                            const plant = land.plant;
+                            const currentSeason = plant.currentSeason || 1;
+                            const totalSeason = plant.totalSeason || 1;
+                            return totalSeason > 1 && currentSeason > 1;
+                        });
+                        if (multiSeasonLands.length > 0) {
+                            await autoRefertilizeMultiSeason(multiSeasonLands);
+                        }
+                    } catch (e) {
+                        logWarn('多季补肥', `执行失败: ${e.message}`);
+                    }
+                }
             } catch (e) {
                 logWarn('收获', e.message);
                 // 收获失败（如作物已枯萎），仍刷新土地状态
@@ -862,7 +1230,6 @@ async function farmCheckLoop() {
     while (farmLoopRunning) {
         await checkFarm();
         if (!farmLoopRunning) break;
-        // console.log(`[农场] 等待 ${CONFIG.farmCheckInterval / 1000}s 后下次检查`);
         await sleep(CONFIG.farmCheckInterval);
     }
 }
@@ -883,11 +1250,14 @@ function startFarmCheckLoop() {
  */
 let lastPushTime = 0;
 function onLandsChangedPush(lands) {
-    if (isCheckingFarm) return;
     const now = Date.now();
     if (now - lastPushTime < 500) return;  // 500ms 防抖
     
     lastPushTime = now;
+    
+    if (isCheckingFarm) {
+        return;
+    }
     
     setTimeout(async () => {
         if (!isCheckingFarm) {
@@ -965,5 +1335,9 @@ module.exports = {
     getCurrentPhase,
     setOperationLimitsCallback,
     serializeLands,
+    getLandStatus,
+    getDisplayLandContext,
+    isOccupiedSlaveLand,
+    buildLandMap,
     unlockLand, upgradeLand, checkAndUnlockLand, checkAndUpgradeLand,
 };

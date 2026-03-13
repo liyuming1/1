@@ -95,6 +95,11 @@ const CONFIG = {
     stealDelay: 0,                // 偷菜延迟（秒）
     forceLowestLevelCrop: false,  // 开启后固定种最低等级作物
     
+    // 种植策略
+    plantingStrategy: 'preferred',  // preferred/bag_priority/level/max_exp/max_fert_exp/max_profit/max_fert_profit
+    preferredSeedId: 0,             // 优先种植的种子ID
+    bagSeedPriority: [],          // 背包种子优先级 [seedId1, seedId2, ...]
+    
     // 好友互动（帮助/除草/除虫/浇水/放虫/放草）
     autoFriend: false,
     // 自动偷菜
@@ -106,6 +111,8 @@ const CONFIG = {
     autoFertilize: false,       // 自动施肥
     autoFertilizeNormal: false, // 普通肥
     autoFertilizeOrganic: false, // 有机肥
+    fertilizerLandTypes: ['gold', 'black', 'red', 'normal'], // 施肥范围
+    fertilizerMultiSeason: false, // 多季补肥
     autoLandUnlock: false,      // 自动解锁土地
     autoLandUpgrade: false,     // 自动升级土地
     autoSell: false,            // 自动出售果实
@@ -144,6 +151,11 @@ function validateConfig(config) {
         forceLowestLevelCrop: false,
         farmCheckInterval: 1000,
         friendCheckInterval: 2000,
+        plantingStrategy: 'preferred',
+        preferredSeedId: 0,
+        bagSeedPriority: [],
+        fertilizerLandTypes: ['gold', 'black', 'red', 'normal'],
+        fertilizerMultiSeason: false,
     };
     
     for (const [key, defaultValue] of Object.entries(defaults)) {
