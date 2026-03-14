@@ -187,30 +187,34 @@ function renderHomeTab() {
         const avatarUrl = acc.data?.avatarUrl || (acc.data?.openId ? `https://q1.qlogo.cn/g?b=qq&nk=${acc.data.openId}&s=100` : '');
         const statusText = acc.status === 'running' ? '在线' : acc.status === 'stopped' ? '离线' : '错误';
         const statusClass = acc.status === 'running' ? 'online' : acc.status === 'error' ? 'error' : 'offline';
-        const runTime = acc.startTime && acc.status === 'running' ? getRunTime(acc.startTime) : '-';
         const expProgress = acc.data?.expProgress;
         const expDisplay = expProgress ? `${expProgress.current}/${expProgress.needed}` : (acc.data?.exp || '-');
         
+        // 运行时间显示
+        let runtimeDisplay = '-';
+        if (acc.startTime) {
+            const runMs = Date.now() - new Date(acc.startTime).getTime();
+            if (runMs > 0) {
+                runtimeDisplay = '运行: ' + getRunTime(acc.startTime);
+            }
+        }
+        
         accountCard.innerHTML = `
-            <div class="home-account-header">
-                <div class="home-account-left">
-                    ${avatarUrl ? `<img class="home-avatar" src="${avatarUrl}" alt="头像">` : '<div class="home-avatar" style="background:#ddd;display:flex;align-items:center;justify-content:center;font-size:20px;">?</div>'}
-                    <div>
-                        <div class="home-account-name">${acc.name || acc.id}</div>
-                        <div class="home-account-platform">${acc.config?.platform === 'wx' ? '微信' : 'QQ'} <span class="status-dot ${statusClass}"></span>${statusText}</div>
-                    </div>
-                </div>
-                <div class="home-account-right">
-                    <span class="run-time">运行: ${runTime}</span>
-                </div>
+            <div class="account-row">
+                ${avatarUrl ? `<img class="account-avatar" src="${avatarUrl}" alt="头像">` : '<div class="account-avatar-placeholder">?</div>'}
+                <span class="account-name">${acc.name || acc.id}</span>
+                <span class="account-status ${statusClass}">${statusText}</span>
+                <span class="account-runtime">${runtimeDisplay}</span>
             </div>
-            <div class="home-account-info">
-                <div class="info-row"><span class="label">GID:</span><span class="value">${acc.data?.gid || '-'}</span></div>
-                <div class="info-row"><span class="label">等级:</span><span class="value">${acc.data?.level || '-'}</span></div>
-                <div class="info-row"><span class="label">经验:</span><span class="value">${expDisplay}</span></div>
-                <div class="info-row"><span class="label">金币:</span><span class="value">${acc.data?.gold || '-'}</span></div>
-                <div class="info-row"><span class="label">点券:</span><span class="value">${acc.data?.voucher || 0}</span></div>
-                <div class="info-row"><span class="label">金豆豆:</span><span class="value">${acc.data?.beans || 0}</span></div>
+            <div class="account-row">
+                <span>等级: ${acc.data?.level || '-'}</span>
+                <span>经验: ${expDisplay}</span>
+            </div>
+            <div class="account-row">
+                <span>金币: ${acc.data?.gold || '-'}</span>
+                <span>点券: ${acc.data?.voucher || 0}</span>
+                <span>金豆: ${acc.data?.beans || 0}</span>
+                <span>GID: ${acc.data?.gid || '-'}</span>
             </div>
         `;
     }
@@ -427,7 +431,7 @@ function updateCountdowns() {
         if (homeCard && selectedAccountId) {
             const acc = accounts.find(a => a.id === selectedAccountId);
             if (acc && acc.startTime && acc.status === 'running') {
-                const timeEl = homeCard.querySelector('.run-time');
+                const timeEl = homeCard.querySelector('.account-runtime');
                 if (timeEl) {
                     timeEl.textContent = '运行: ' + getRunTime(acc.startTime);
                 }
@@ -1567,11 +1571,10 @@ function generateLandCellHtml(land) {
     const status = land.status || 'growing';
     const name = land.plant?.name || '未知';
     const image = land.plant?.image;
-    const icon = getLandIcon(status, name, image);
     const matureTime = land.plant?.matureTime;
     
     let html = `
-        <span class="land-icon">${icon}</span>
+        ${image ? `<span class="land-icon"><img src="${image}" class="plant-icon-img" alt="${name}"></span>` : ''}
         <div class="land-info">
             <span class="land-name">${name}</span>
     `;
@@ -1708,8 +1711,8 @@ function showLandDetail(land) {
         }
         
         const statusText = {
-            'ready': '✅ 可收获',
-            'growing': '🌱 生长中',
+            'ready': '可收获',
+            'growing': '生长中',
             'needsWater': '💧 缺水',
             'needsWeed': '🌿 有草',
             'needsInsect': '🐛 有虫',
@@ -1724,7 +1727,7 @@ function showLandDetail(land) {
         const content = document.getElementById('land-detail-content');
         content.innerHTML = `
             <div class="land-detail-header">
-                <div class="land-detail-icon">${icon}</div>
+                ${image ? `<div class="land-detail-icon"><img src="${image}" class="plant-icon-img" alt="${plant.name}"></div>` : ''}
                 <div class="land-detail-info">
                     <h3>${plant.name}</h3>
                     <p>${plant.phaseName}</p>
@@ -2469,7 +2472,7 @@ async function pollScanStatusInAdd(loginCode) {
 }
 
 function renderAccountLogs(accountId) {
-    const logsDiv = document.getElementById('home-logs');
+    const logsDiv = document.getElementById('account-logs');
     if (!logsDiv) return;
     
     const wasAtBottom = logsDiv.scrollHeight - logsDiv.scrollTop - logsDiv.clientHeight < 50;
@@ -2487,7 +2490,7 @@ function renderAccountLogs(accountId) {
 }
 
 function appendLog(accountId, level, message, timestamp) {
-    const logsDiv = document.getElementById('home-logs');
+    const logsDiv = document.getElementById('account-logs');
     if (!logsDiv) return;
     
     const wasAtBottom = logsDiv.scrollHeight - logsDiv.scrollTop - logsDiv.clientHeight < 50;
@@ -2517,8 +2520,11 @@ function clearLogs() {
     if (!selectedAccountId) return;
     accountLogs[selectedAccountId] = [];
     saveLogsToStorage();
-    const logsDiv = document.getElementById('home-logs');
+    const logsDiv = document.getElementById('account-logs');
     if (logsDiv) logsDiv.innerHTML = '';
+    // 同时清空主页日志
+    const homeLogsDiv = document.getElementById('home-logs');
+    if (homeLogsDiv) homeLogsDiv.innerHTML = '<div class="log-entry" style="color:#666;">暂无日志</div>';
 }
 
 async function deleteAccount(id) {
