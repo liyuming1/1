@@ -669,7 +669,7 @@ async function visitFriend(friend, totalActions, myGid) {
                         await stealHarvest(gid, [landId]);
                         ok++;
                     } catch (e2) { /* ignore */ }
-                    await sleep(50);
+                    await sleep(100);
                 }
             }
         }
